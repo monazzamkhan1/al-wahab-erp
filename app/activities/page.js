@@ -150,7 +150,11 @@ export default function ActivitiesPage() {
     if (result.error) {
       alert("Save error: " + result.error.message);
     } else {
-      alert(editingId ? "Activity update ho gayi." : "Activity create ho gayi.");
+      alert(
+        editingId
+          ? "Activity update ho gayi."
+          : "Activity create ho gayi."
+      );
 
       setForm(emptyForm);
       setEditingId(null);
@@ -293,13 +297,16 @@ export default function ActivitiesPage() {
             >
               <div>
                 <label>Doctor / Clinic *</label>
+
                 <select
                   name="customer_id"
                   value={form.customer_id}
                   onChange={handleChange}
                   style={inputStyle}
                 >
-                  <option value="">Select Doctor / Clinic</option>
+                  <option value="">
+                    Select Doctor / Clinic
+                  </option>
 
                   {customers.map((customer) => (
                     <option key={customer.id} value={customer.id}>
@@ -315,6 +322,7 @@ export default function ActivitiesPage() {
 
               <div>
                 <label>Activity Type</label>
+
                 <select
                   name="activity_type"
                   value={form.activity_type}
@@ -331,6 +339,7 @@ export default function ActivitiesPage() {
 
               <div>
                 <label>Activity Title *</label>
+
                 <input
                   name="title"
                   value={form.title}
@@ -342,6 +351,7 @@ export default function ActivitiesPage() {
 
               <div>
                 <label>Start Date</label>
+
                 <input
                   type="date"
                   name="start_date"
@@ -353,6 +363,7 @@ export default function ActivitiesPage() {
 
               <div>
                 <label>End Date</label>
+
                 <input
                   type="date"
                   name="end_date"
@@ -364,6 +375,7 @@ export default function ActivitiesPage() {
 
               <div>
                 <label>Approved Budget</label>
+
                 <input
                   type="number"
                   min="0"
@@ -377,6 +389,7 @@ export default function ActivitiesPage() {
 
               <div>
                 <label>Target Sales</label>
+
                 <input
                   type="number"
                   min="0"
@@ -390,6 +403,7 @@ export default function ActivitiesPage() {
 
               <div>
                 <label>Actual Expense</label>
+
                 <input
                   type="number"
                   min="0"
@@ -403,6 +417,7 @@ export default function ActivitiesPage() {
 
               <div>
                 <label>Approval Status</label>
+
                 <select
                   name="approval_status"
                   value={form.approval_status}
@@ -419,6 +434,7 @@ export default function ActivitiesPage() {
 
               <div>
                 <label>Payment / Voucher Reference</label>
+
                 <input
                   name="payment_reference"
                   value={form.payment_reference}
@@ -430,6 +446,7 @@ export default function ActivitiesPage() {
 
               <div>
                 <label>Supporting Document Reference</label>
+
                 <input
                   name="supporting_document"
                   value={form.supporting_document}
@@ -442,6 +459,7 @@ export default function ActivitiesPage() {
 
             <div style={{ marginTop: "18px" }}>
               <label>Notes</label>
+
               <textarea
                 name="notes"
                 value={form.notes}
@@ -520,7 +538,9 @@ export default function ActivitiesPage() {
               marginBottom: "20px",
             }}
           >
-            <h2 style={{ margin: 0 }}>Activity History</h2>
+            <h2 style={{ margin: 0 }}>
+              Activity History
+            </h2>
 
             <input
               value={search}
@@ -545,19 +565,42 @@ export default function ActivitiesPage() {
                 style={{
                   width: "100%",
                   borderCollapse: "collapse",
-                  minWidth: "1050px",
+                  minWidth: "1150px",
                 }}
               >
                 <thead>
                   <tr style={{ background: "#f1f4f8" }}>
-                    <th style={thStyle}>Doctor / Clinic</th>
-                    <th style={thStyle}>Activity</th>
-                    <th style={thStyle}>Dates</th>
-                    <th style={thStyle}>Budget</th>
-                    <th style={thStyle}>Target Sales</th>
-                    <th style={thStyle}>Expense</th>
-                    <th style={thStyle}>Status</th>
-                    <th style={thStyle}>Actions</th>
+                    <th style={thStyle}>
+                      Doctor / Clinic
+                    </th>
+
+                    <th style={thStyle}>
+                      Activity
+                    </th>
+
+                    <th style={thStyle}>
+                      Dates
+                    </th>
+
+                    <th style={thStyle}>
+                      Budget
+                    </th>
+
+                    <th style={thStyle}>
+                      Target Sales
+                    </th>
+
+                    <th style={thStyle}>
+                      Expense
+                    </th>
+
+                    <th style={thStyle}>
+                      Status
+                    </th>
+
+                    <th style={thStyle}>
+                      Actions
+                    </th>
                   </tr>
                 </thead>
 
@@ -566,18 +609,28 @@ export default function ActivitiesPage() {
                     <tr key={activity.id}>
                       <td style={tdStyle}>
                         <strong>
-                          {activity.customers?.name || "Unknown"}
+                          {activity.customers?.name ||
+                            "Unknown"}
                         </strong>
+
                         <br />
+
                         <small>
-                          {activity.customers?.customer_type || ""}
+                          {activity.customers
+                            ?.customer_type || ""}
                         </small>
                       </td>
 
                       <td style={tdStyle}>
-                        <strong>{activity.title}</strong>
+                        <strong>
+                          {activity.title}
+                        </strong>
+
                         <br />
-                        <small>{activity.activity_type}</small>
+
+                        <small>
+                          {activity.activity_type}
+                        </small>
                       </td>
 
                       <td style={tdStyle}>
@@ -587,15 +640,24 @@ export default function ActivitiesPage() {
                       </td>
 
                       <td style={tdStyle}>
-                        Rs. {money(activity.approved_budget)}
+                        Rs.{" "}
+                        {money(
+                          activity.approved_budget
+                        )}
                       </td>
 
                       <td style={tdStyle}>
-                        Rs. {money(activity.target_sales)}
+                        Rs.{" "}
+                        {money(
+                          activity.target_sales
+                        )}
                       </td>
 
                       <td style={tdStyle}>
-                        Rs. {money(activity.actual_expense)}
+                        Rs.{" "}
+                        {money(
+                          activity.actual_expense
+                        )}
                       </td>
 
                       <td style={tdStyle}>
@@ -604,11 +666,14 @@ export default function ActivitiesPage() {
                             padding: "5px 9px",
                             borderRadius: "20px",
                             background:
-                              activity.approval_status === "approved"
+                              activity.approval_status ===
+                              "approved"
                                 ? "#dcfce7"
-                                : activity.approval_status === "completed"
+                                : activity.approval_status ===
+                                  "completed"
                                 ? "#dbeafe"
-                                : activity.approval_status === "rejected"
+                                : activity.approval_status ===
+                                  "rejected"
                                 ? "#fee2e2"
                                 : "#fef3c7",
                             fontSize: "12px",
@@ -620,15 +685,33 @@ export default function ActivitiesPage() {
                       </td>
 
                       <td style={tdStyle}>
+                        {/* NEW: VIEW DETAILS */}
+
+                        <a
+                          href={`/activities/${activity.id}`}
+                          style={{
+                            ...actionButton,
+                            background: "#16a34a",
+                            textDecoration: "none",
+                            display: "inline-block",
+                          }}
+                        >
+                          View Details
+                        </a>
+
                         <button
-                          onClick={() => editActivity(activity)}
+                          onClick={() =>
+                            editActivity(activity)
+                          }
                           style={actionButton}
                         >
                           Edit
                         </button>
 
                         <button
-                          onClick={() => deleteActivity(activity.id)}
+                          onClick={() =>
+                            deleteActivity(activity.id)
+                          }
                           style={{
                             ...actionButton,
                             background: "#dc2626",
@@ -682,5 +765,6 @@ const actionButton = {
   padding: "7px 10px",
   borderRadius: "6px",
   marginRight: "6px",
+  marginBottom: "5px",
   cursor: "pointer",
 };
