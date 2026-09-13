@@ -3,6 +3,42 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
 
+const dosageForms = [
+  "Tablet",
+  "Capsule",
+  "Syrup",
+  "Suspension",
+  "Injection",
+  "Infusion",
+  "Cream",
+  "Ointment",
+  "Gel",
+  "Lotion",
+  "Drops",
+  "Sachet",
+  "Powder",
+  "Inhaler",
+  "Suppository",
+  "Other",
+];
+
+const categories = [
+  "Antibiotic",
+  "Analgesic / Painkiller",
+  "Antipyretic",
+  "Antiallergic",
+  "Gastro",
+  "Cardiovascular",
+  "Diabetic",
+  "Vitamins & Supplements",
+  "Dermatology",
+  "Respiratory",
+  "Neurology",
+  "Gynecology",
+  "Pediatric",
+  "Other",
+];
+
 export default function ProductsPage() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -70,13 +106,31 @@ export default function ProductsPage() {
     setEditingId(null);
   }
 
+  function generateProductCode() {
+    const numbers = products
+      .map((product) => {
+        const code = product.product_code || "";
+        const match = code.match(/^AW-(\d+)$/);
+        return match ? Number(match[1]) : 0;
+      })
+      .filter((number) => number > 0);
+
+    const nextNumber =
+      numbers.length > 0 ? Math.max(...numbers) + 1 : 1;
+
+    return `AW-${String(nextNumber).padStart(4, "0")}`;
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setSaving(true);
     setMessage("");
 
+    const productCode =
+      form.product_code.trim() || generateProductCode();
+
     const productData = {
-      product_code: form.product_code || null,
+      product_code: productCode,
       product_name: form.product_name,
       generic_name: form.generic_name || null,
       dosage_form: form.dosage_form || null,
@@ -107,7 +161,7 @@ export default function ProductsPage() {
       setMessage(
         editingId
           ? "Product updated successfully."
-          : "Product added successfully."
+          : `Product added successfully. Code: ${productCode}`
       );
 
       resetForm();
@@ -180,7 +234,6 @@ export default function ProductsPage() {
         boxSizing: "border-box",
       }}
     >
-      {/* Header */}
       <div
         style={{
           background: "#111827",
@@ -203,7 +256,6 @@ export default function ProductsPage() {
         </p>
       </div>
 
-      {/* Back Button */}
       <a
         href="/"
         style={{
@@ -221,7 +273,6 @@ export default function ProductsPage() {
         ← Dashboard
       </a>
 
-      {/* Form */}
       <section
         style={{
           background: "#fff",
@@ -239,56 +290,179 @@ export default function ProductsPage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gridTemplateColumns:
+                "repeat(auto-fit, minmax(220px, 1fr))",
               gap: "14px",
             }}
           >
-            {[
-              ["product_code", "Product Code"],
-              ["product_name", "Product Name"],
-              ["generic_name", "Generic Name"],
-              ["dosage_form", "Dosage Form"],
-              ["strength", "Strength"],
-              ["pack_size", "Pack Size"],
-              ["category", "Category"],
-              ["purchase_rate", "Purchase Rate"],
-              ["sale_rate", "Sale Rate"],
-              ["min_stock", "Minimum Stock"],
-            ].map(([name, label]) => (
-              <div key={name}>
-                <label
-                  style={{
-                    display: "block",
-                    marginBottom: "6px",
-                    fontSize: "14px",
-                    fontWeight: "bold",
-                    color: "#374151",
-                  }}
-                >
-                  {label}
-                </label>
+            <div>
+              <label style={labelStyle}>
+                Product Code
+              </label>
 
-                <input
-                  name={name}
-                  value={form[name]}
-                  onChange={handleChange}
-                  required={name === "product_name"}
-                  type={
-                    ["purchase_rate", "sale_rate", "min_stock"].includes(name)
-                      ? "number"
-                      : "text"
-                  }
-                  step="0.01"
-                  style={{
-                    width: "100%",
-                    padding: "11px",
-                    border: "1px solid #d1d5db",
-                    borderRadius: "7px",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-            ))}
+              <input
+                name="product_code"
+                value={form.product_code}
+                onChange={handleChange}
+                placeholder="Leave blank for automatic code"
+                style={inputStyle}
+              />
+
+              <small style={{ color: "#6b7280" }}>
+                Example: AW-0001
+              </small>
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                Product Name *
+              </label>
+
+              <input
+                name="product_name"
+                value={form.product_name}
+                onChange={handleChange}
+                required
+                placeholder="Enter product name"
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                Generic Name
+              </label>
+
+              <input
+                name="generic_name"
+                value={form.generic_name}
+                onChange={handleChange}
+                placeholder="Enter generic name"
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                Dosage Form
+              </label>
+
+              <select
+                name="dosage_form"
+                value={form.dosage_form}
+                onChange={handleChange}
+                style={inputStyle}
+              >
+                <option value="">
+                  Select Dosage Form
+                </option>
+
+                {dosageForms.map((formName) => (
+                  <option key={formName} value={formName}>
+                    {formName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                Strength
+              </label>
+
+              <input
+                name="strength"
+                value={form.strength}
+                onChange={handleChange}
+                placeholder="Example: 500mg"
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                Pack Size
+              </label>
+
+              <input
+                name="pack_size"
+                value={form.pack_size}
+                onChange={handleChange}
+                placeholder="Example: 10 Tablets"
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                Category
+              </label>
+
+              <select
+                name="category"
+                value={form.category}
+                onChange={handleChange}
+                style={inputStyle}
+              >
+                <option value="">
+                  Select Category
+                </option>
+
+                {categories.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                Purchase Rate
+              </label>
+
+              <input
+                name="purchase_rate"
+                value={form.purchase_rate}
+                onChange={handleChange}
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                Sale Rate
+              </label>
+
+              <input
+                name="sale_rate"
+                value={form.sale_rate}
+                onChange={handleChange}
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                style={inputStyle}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                Minimum Stock
+              </label>
+
+              <input
+                name="min_stock"
+                value={form.min_stock}
+                onChange={handleChange}
+                type="number"
+                step="0.01"
+                placeholder="0"
+                style={inputStyle}
+              />
+            </div>
           </div>
 
           <div
@@ -352,7 +526,6 @@ export default function ProductsPage() {
         )}
       </section>
 
-      {/* Product List */}
       <section
         style={{
           background: "#fff",
@@ -370,7 +543,9 @@ export default function ProductsPage() {
             marginBottom: "15px",
           }}
         >
-          <h2 style={{ margin: 0 }}>Product List</h2>
+          <h2 style={{ margin: 0 }}>
+            Product List
+          </h2>
 
           <input
             value={search}
@@ -422,7 +597,9 @@ export default function ProductsPage() {
                     </td>
 
                     <td style={tdStyle}>
-                      <strong>{product.product_name}</strong>
+                      <strong>
+                        {product.product_name}
+                      </strong>
                     </td>
 
                     <td style={tdStyle}>
@@ -438,16 +615,24 @@ export default function ProductsPage() {
                     </td>
 
                     <td style={tdStyle}>
-                      Rs. {Number(product.purchase_rate || 0).toFixed(2)}
+                      Rs.{" "}
+                      {Number(
+                        product.purchase_rate || 0
+                      ).toFixed(2)}
                     </td>
 
                     <td style={tdStyle}>
-                      Rs. {Number(product.sale_rate || 0).toFixed(2)}
+                      Rs.{" "}
+                      {Number(
+                        product.sale_rate || 0
+                      ).toFixed(2)}
                     </td>
 
                     <td style={tdStyle}>
                       <button
-                        onClick={() => editProduct(product)}
+                        onClick={() =>
+                          editProduct(product)
+                        }
                         style={{
                           padding: "7px 10px",
                           marginRight: "5px",
@@ -462,7 +647,9 @@ export default function ProductsPage() {
                       </button>
 
                       <button
-                        onClick={() => deleteProduct(product.id)}
+                        onClick={() =>
+                          deleteProduct(product.id)
+                        }
                         style={{
                           padding: "7px 10px",
                           background: "#dc2626",
@@ -485,6 +672,23 @@ export default function ProductsPage() {
     </main>
   );
 }
+
+const labelStyle = {
+  display: "block",
+  marginBottom: "6px",
+  fontSize: "14px",
+  fontWeight: "bold",
+  color: "#374151",
+};
+
+const inputStyle = {
+  width: "100%",
+  padding: "11px",
+  border: "1px solid #d1d5db",
+  borderRadius: "7px",
+  boxSizing: "border-box",
+  background: "#fff",
+};
 
 const thStyle = {
   padding: "12px",
