@@ -41,6 +41,7 @@ const categories = [
 
 export default function ProductsPage() {
   const [products, setProducts] = useState([]);
+  const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
@@ -53,6 +54,7 @@ export default function ProductsPage() {
     strength: "",
     pack_size: "",
     category: "",
+    company_id: "",
     purchase_rate: "",
     sale_rate: "",
     min_stock: "",
@@ -63,6 +65,7 @@ export default function ProductsPage() {
 
   useEffect(() => {
     loadProducts();
+    loadCompanies();
   }, []);
 
   async function loadProducts() {
@@ -70,7 +73,14 @@ export default function ProductsPage() {
 
     const { data, error } = await supabase
       .from("products")
-      .select("*")
+      .select(`
+        *,
+        companies (
+          id,
+          name,
+          company_type
+        )
+      `)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -80,6 +90,21 @@ export default function ProductsPage() {
     }
 
     setLoading(false);
+  }
+
+  async function loadCompanies() {
+    const { data, error } = await supabase
+      .from("companies")
+      .select("id, name, company_type")
+      .in("company_type", ["manufacturer", "both"])
+      .eq("is_active", true)
+      .order("name", { ascending: true });
+
+    if (error) {
+      setMessage(error.message);
+    } else {
+      setCompanies(data || []);
+    }
   }
 
   function handleChange(e) {
@@ -98,6 +123,7 @@ export default function ProductsPage() {
       strength: "",
       pack_size: "",
       category: "",
+      company_id: "",
       purchase_rate: "",
       sale_rate: "",
       min_stock: "",
@@ -137,6 +163,7 @@ export default function ProductsPage() {
       strength: form.strength || null,
       pack_size: form.pack_size || null,
       category: form.category || null,
+      company_id: form.company_id || null,
       purchase_rate: Number(form.purchase_rate) || 0,
       sale_rate: Number(form.sale_rate) || 0,
       min_stock: Number(form.min_stock) || 0,
@@ -182,6 +209,7 @@ export default function ProductsPage() {
       strength: product.strength || "",
       pack_size: product.pack_size || "",
       category: product.category || "",
+      company_id: product.company_id || "",
       purchase_rate: product.purchase_rate || "",
       sale_rate: product.sale_rate || "",
       min_stock: product.min_stock || "",
@@ -219,6 +247,7 @@ export default function ProductsPage() {
       ${product.product_code || ""}
       ${product.generic_name || ""}
       ${product.category || ""}
+      ${product.companies?.name || ""}
     `.toLowerCase();
 
     return text.includes(search.toLowerCase());
@@ -326,6 +355,41 @@ export default function ProductsPage() {
                 placeholder="Enter product name"
                 style={inputStyle}
               />
+            </div>
+
+            <div>
+              <label style={labelStyle}>
+                Manufacturer / Principal
+              </label>
+
+              <select
+                name="company_id"
+                value={form.company_id}
+                onChange={handleChange}
+                style={inputStyle}
+              >
+                <option value="">
+                  Select Manufacturer / Principal
+                </option>
+
+                {companies.map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                  </option>
+                ))}
+              </select>
+
+              {companies.length === 0 && (
+                <small
+                  style={{
+                    color: "#dc2626",
+                    display: "block",
+                    marginTop: "5px",
+                  }}
+                >
+                  No Manufacturer/Principal added yet.
+                </small>
+              )}
             </div>
 
             <div>
@@ -573,13 +637,14 @@ export default function ProductsPage() {
               style={{
                 width: "100%",
                 borderCollapse: "collapse",
-                minWidth: "850px",
+                minWidth: "1000px",
               }}
             >
               <thead>
                 <tr style={{ background: "#f3f4f6" }}>
                   <th style={thStyle}>Code</th>
                   <th style={thStyle}>Product</th>
+                  <th style={thStyle}>Manufacturer</th>
                   <th style={thStyle}>Generic</th>
                   <th style={thStyle}>Form</th>
                   <th style={thStyle}>Pack</th>
@@ -600,6 +665,10 @@ export default function ProductsPage() {
                       <strong>
                         {product.product_name}
                       </strong>
+                    </td>
+
+                    <td style={tdStyle}>
+                      {product.companies?.name || "-"}
                     </td>
 
                     <td style={tdStyle}>
