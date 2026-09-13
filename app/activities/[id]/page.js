@@ -1,34 +1,43 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../supabase";
 
-export default function ActivityDetailsPage({ params }) {
-  const activityId = params.id;
+export default function ActivityDetailsPage() {
+  const params = useParams();
+  const router = useRouter();
+  const activityId = params?.id;
 
   const [activity, setActivity] = useState(null);
   const [adjustments, setAdjustments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
 
-  const [form, setForm] = useState({
-    adjustment_type: "recovery",
-    amount: "",
-    adjustment_date: "",
-    reason: "",
-    reference_no: "",
-    supporting_document: "",
-    approved_by: "",
-    notes: "",
-  });
+  const [actualSales, setActualSales] = useState("");
+  const [completionDate, setCompletionDate] = useState("");
+  const [completionRemarks, setCompletionRemarks] = useState("");
+  const [status, setStatus] = useState("");
+
+  const [adjustmentType, setAdjustmentType] = useState("recovery");
+  const [adjustmentAmount, setAdjustmentAmount] = useState("");
+  const [adjustmentDate, setAdjustmentDate] = useState("");
+  const [adjustmentReason, setAdjustmentReason] = useState("");
+  const [adjustmentReference, setAdjustmentReference] = useState("");
+  const [adjustmentDocument, setAdjustmentDocument] = useState("");
+  const [adjustmentApprovedBy, setAdjustmentApprovedBy] = useState("");
+  const [adjustmentNotes, setAdjustmentNotes] = useState("");
 
   useEffect(() => {
-    loadActivity();
-    loadAdjustments();
+    if (activityId) {
+      loadActivity();
+    }
   }, [activityId]);
 
   async function loadActivity() {
     setLoading(true);
+    setMessage("");
 
     const { data, error } = await supabase
       .from("activities")
@@ -38,10 +47,11 @@ export default function ActivityDetailsPage({ params }) {
           id,
           name,
           customer_type,
+          contact_person,
           phone,
           email,
-          address,
-          city
+          city,
+          address
         )
       `)
       .eq("id", activityId)
@@ -49,10 +59,18 @@ export default function ActivityDetailsPage({ params }) {
 
     if (error) {
       console.error(error);
-      alert("Activity load nahi ho saki: " + error.message);
-    } else {
-      setActivity(data);
+      setMessage("Activity load nahi ho saki.");
+      setLoading(false);
+      return;
     }
+
+    setActivity(data);
+    setActualSales(data.actual_sales ?? "");
+    setCompletionDate(data.completion_date ?? "");
+    setCompletionRemarks(data.completion_remarks ?? "");
+    setStatus(data.approval_status ?? "pending");
+
+    await loadAdjustments();
 
     setLoading(false);
   }
@@ -62,108 +80,129 @@ export default function ActivityDetailsPage({ params }) {
       .from("activity_adjustments")
       .select("*")
       .eq("activity_id", activityId)
+      .order("adjustment_date", { ascending: false })
       .order("created_at", { ascending: false });
 
     if (error) {
       console.error(error);
-      alert("Adjustment history load nahi ho saki: " + error.message);
       return;
     }
 
     setAdjustments(data || []);
   }
 
-  function handleChange(e) {
-    setForm({
-      ...form,
-      [e.target.name]: e.target.value,
-    });
+  async function saveCompletion() {
+    if (!activity) return;
+
+    setSaving(true);
+    setMessage("");
+
+    const { error } = await supabase
+      .from("activities")
+      .update({
+        actual_sales: Number(actualSales || 0),
+        completion_date: completionDate || null,
+        completion_remarks: completionRemarks || null,
+        approval_status: status,
+      })
+      .eq("id", activity.id);
+
+    setSaving(false);
+
+    if (error) {
+      console.error(error);
+      setMessage("Activity update nahi ho saki: " + error.message);
+      return;
+    }
+
+    setMessage("Activity successfully updated.");
+    await loadActivity();
   }
 
   async function addAdjustment(e) {
     e.preventDefault();
 
-    if (!form.amount || Number(form.amount) <= 0) {
-      alert("Adjustment amount enter karein.");
+    if (!activity) return;
+
+    const amount = Number(adjustmentAmount);
+
+    if (!amount || amount <= 0) {
+      setMessage("Adjustment amount enter karein.");
       return;
     }
 
-    if (!form.reason.trim()) {
-      alert("Adjustment reason enter karein.");
+    if (!adjustmentReason.trim()) {
+      setMessage("Adjustment ka reason enter karein.");
       return;
     }
 
-    const approvedBudget = Number(activity?.approved_budget || 0);
-    const currentTotal = adjustments.reduce(
+    const totalAdjustments = adjustments.reduce(
       (sum, item) => sum + Number(item.amount || 0),
       0
     );
 
-    const remaining = approvedBudget - currentTotal;
+    const remaining =
+      Number(activity.approved_budget || 0) - totalAdjustments;
 
-    if (Number(form.amount) > remaining) {
-      alert(
-        `Adjustment amount remaining amount se zyada nahi ho sakta.\nRemaining: Rs. ${remaining.toLocaleString(
-          "en-PK"
-        )}`
+    if (amount > remaining) {
+      setMessage(
+        `Adjustment amount remaining budget se zyada nahi ho sakta. Remaining: Rs. ${remaining.toLocaleString()}`
       );
       return;
     }
 
     setSaving(true);
+    setMessage("");
 
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
-    const payload = {
-      activity_id: activityId,
-      adjustment_type: form.adjustment_type,
-      amount: Number(form.amount),
-      adjustment_date:
-        form.adjustment_date ||
-        new Date().toISOString().split("T")[0],
-      reason: form.reason.trim(),
-      reference_no: form.reference_no.trim() || null,
-      supporting_document:
-        form.supporting_document.trim() || null,
-      approved_by: form.approved_by.trim() || null,
-      notes: form.notes.trim() || null,
-      created_by: user?.id || null,
-    };
-
     const { error } = await supabase
       .from("activity_adjustments")
-      .insert([payload]);
-
-    if (error) {
-      alert("Adjustment save error: " + error.message);
-    } else {
-      alert("Adjustment successfully add ho gayi.");
-
-      setForm({
-        adjustment_type: "recovery",
-        amount: "",
-        adjustment_date: "",
-        reason: "",
-        reference_no: "",
-        supporting_document: "",
-        approved_by: "",
-        notes: "",
+      .insert({
+        activity_id: activity.id,
+        adjustment_type: adjustmentType,
+        amount,
+        adjustment_date:
+          adjustmentDate ||
+          new Date().toISOString().split("T")[0],
+        reason: adjustmentReason.trim(),
+        reference_no: adjustmentReference || null,
+        supporting_document: adjustmentDocument || null,
+        approved_by: adjustmentApprovedBy || null,
+        notes: adjustmentNotes || null,
+        created_by: user?.id || null,
       });
 
-      loadAdjustments();
+    setSaving(false);
+
+    if (error) {
+      console.error(error);
+      setMessage("Adjustment save nahi ho saki: " + error.message);
+      return;
     }
 
-    setSaving(false);
+    setAdjustmentType("recovery");
+    setAdjustmentAmount("");
+    setAdjustmentDate("");
+    setAdjustmentReason("");
+    setAdjustmentReference("");
+    setAdjustmentDocument("");
+    setAdjustmentApprovedBy("");
+    setAdjustmentNotes("");
+
+    setMessage("Adjustment successfully added.");
+
+    await loadAdjustments();
   }
 
   async function deleteAdjustment(id) {
-    const confirmDelete = window.confirm(
-      "Kya aap ye adjustment record delete karna chahte hain?"
+    const confirmed = window.confirm(
+      "Kya aap is adjustment ko delete karna chahte hain?"
     );
 
-    if (!confirmDelete) return;
+    if (!confirmed) return;
 
     const { error } = await supabase
       .from("activity_adjustments")
@@ -171,36 +210,31 @@ export default function ActivityDetailsPage({ params }) {
       .eq("id", id);
 
     if (error) {
-      alert("Delete error: " + error.message);
+      console.error(error);
+      setMessage("Adjustment delete nahi ho saki.");
       return;
     }
 
-    loadAdjustments();
-  }
-
-  function money(value) {
-    return Number(value || 0).toLocaleString("en-PK");
+    setMessage("Adjustment deleted.");
+    await loadAdjustments();
   }
 
   if (loading) {
     return (
-      <main style={pageStyle}>
-        <div style={containerStyle}>
-          <p>Loading activity...</p>
-        </div>
+      <main style={styles.page}>
+        <div style={styles.card}>Loading activity...</div>
       </main>
     );
   }
 
   if (!activity) {
     return (
-      <main style={pageStyle}>
-        <div style={containerStyle}>
-          <h2>Activity not found</h2>
-
-          <a href="/activities" style={backButton}>
+      <main style={styles.page}>
+        <div style={styles.card}>
+          <h2>Activity Not Found</h2>
+          <button style={styles.backButton} onClick={() => router.push("/activities")}>
             ← Back to Activities
-          </a>
+          </button>
         </div>
       </main>
     );
@@ -209,75 +243,76 @@ export default function ActivityDetailsPage({ params }) {
   const approvedBudget = Number(activity.approved_budget || 0);
   const actualExpense = Number(activity.actual_expense || 0);
   const targetSales = Number(activity.target_sales || 0);
+  const achievedSales = Number(actualSales || 0);
 
   const totalAdjustments = adjustments.reduce(
     (sum, item) => sum + Number(item.amount || 0),
     0
   );
 
-  const netActivityAmount = Math.max(
-    0,
-    approvedBudget - totalAdjustments
-  );
+  const remainingBudget = approvedBudget - totalAdjustments;
 
-  const remainingAdjustment = Math.max(
-    0,
-    approvedBudget - totalAdjustments
-  );
-
-  const salesAchievement =
+  const salesPercentage =
     targetSales > 0
-      ? Math.min(
-          100,
-          (Number(activity.actual_sales || 0) / targetSales) * 100
-        )
+      ? Math.min((achievedSales / targetSales) * 100, 100)
+      : 0;
+
+  const expensePercentage =
+    approvedBudget > 0
+      ? Math.min((actualExpense / approvedBudget) * 100, 100)
       : 0;
 
   return (
-    <main style={pageStyle}>
-      <div style={containerStyle}>
-        <div style={headerStyle}>
+    <main style={styles.page}>
+      <div style={styles.container}>
+
+        {/* HEADER */}
+        <div style={styles.header}>
           <div>
-            <h1 style={{ margin: 0 }}>
+            <button
+              style={styles.backButton}
+              onClick={() => router.push("/activities")}
+            >
+              ← Back to Activities
+            </button>
+
+            <h1 style={styles.title}>
               Activity Details
             </h1>
 
-            <p style={{ color: "#687386" }}>
-              Complete activity record, settlement aur adjustment history
+            <p style={styles.subtitle}>
+              Complete activity information, business achievement and settlement
             </p>
           </div>
 
-          <a href="/activities" style={backButton}>
-            ← Activities
-          </a>
+          <div style={styles.statusBox}>
+            <span style={styles.statusLabel}>Status</span>
+
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              style={styles.statusSelect}
+            >
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="completed">Completed</option>
+              <option value="rejected">Rejected</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
         </div>
 
-        {/* ACTIVITY SUMMARY */}
-
-        <section style={cardStyle}>
-          <div style={sectionHeader}>
-            <h2 style={{ margin: 0 }}>
-              {activity.title}
-            </h2>
-
-            <span
-              style={{
-                ...statusBadge,
-                background:
-                  activity.approval_status === "completed"
-                    ? "#dcfce7"
-                    : activity.approval_status === "approved"
-                    ? "#dbeafe"
-                    : activity.approval_status === "rejected"
-                    ? "#fee2e2"
-                    : "#fef3c7",
-              }}
-            >
-              {activity.approval_status}
-            </span>
+        {message && (
+          <div style={styles.message}>
+            {message}
           </div>
+        )}
 
-          <div style={gridStyle}>
+        {/* ACTIVITY INFORMATION */}
+        <section style={styles.card}>
+          <h2 style={styles.sectionTitle}>Activity Information</h2>
+
+          <div style={styles.grid}>
             <Info
               label="Doctor / Clinic"
               value={activity.customers?.name || "-"}
@@ -289,8 +324,23 @@ export default function ActivityDetailsPage({ params }) {
             />
 
             <Info
+              label="Contact Person"
+              value={activity.customers?.contact_person || "-"}
+            />
+
+            <Info
+              label="Phone"
+              value={activity.customers?.phone || "-"}
+            />
+
+            <Info
               label="Activity Type"
               value={activity.activity_type || "-"}
+            />
+
+            <Info
+              label="Activity Title"
+              value={activity.title || "-"}
             />
 
             <Info
@@ -302,357 +352,349 @@ export default function ActivityDetailsPage({ params }) {
               label="End Date"
               value={activity.end_date || "-"}
             />
-
-            <Info
-              label="Phone"
-              value={activity.customers?.phone || "-"}
-            />
-
-            <Info
-              label="City"
-              value={activity.customers?.city || "-"}
-            />
-
-            <Info
-              label="Payment Reference"
-              value={activity.payment_reference || "-"}
-            />
           </div>
 
           {activity.notes && (
-            <div style={notesBox}>
-              <strong>Activity Notes</strong>
+            <div style={styles.notesBox}>
+              <strong>Notes</strong>
               <p>{activity.notes}</p>
             </div>
           )}
         </section>
 
         {/* FINANCIAL SUMMARY */}
+        <section style={styles.card}>
+          <h2 style={styles.sectionTitle}>Financial Summary</h2>
 
-        <section style={cardStyle}>
-          <h2>Activity Financial Summary</h2>
-
-          <div style={summaryGrid}>
+          <div style={styles.summaryGrid}>
             <SummaryCard
               title="Approved Budget"
-              value={`Rs. ${money(approvedBudget)}`}
+              value={`Rs. ${approvedBudget.toLocaleString()}`}
             />
 
             <SummaryCard
               title="Actual Expense"
-              value={`Rs. ${money(actualExpense)}`}
+              value={`Rs. ${actualExpense.toLocaleString()}`}
             />
 
             <SummaryCard
               title="Total Recovery / Adjustment"
-              value={`Rs. ${money(totalAdjustments)}`}
+              value={`Rs. ${totalAdjustments.toLocaleString()}`}
             />
 
             <SummaryCard
-              title="Net Activity Amount"
-              value={`Rs. ${money(netActivityAmount)}`}
+              title="Remaining Amount"
+              value={`Rs. ${remainingBudget.toLocaleString()}`}
             />
 
             <SummaryCard
               title="Target Sales"
-              value={`Rs. ${money(targetSales)}`}
+              value={`Rs. ${targetSales.toLocaleString()}`}
             />
 
             <SummaryCard
               title="Actual Sales"
-              value={`Rs. ${money(activity.actual_sales || 0)}`}
+              value={`Rs. ${achievedSales.toLocaleString()}`}
+            />
+          </div>
+        </section>
+
+        {/* BUSINESS ACHIEVEMENT */}
+        <section style={styles.card}>
+          <h2 style={styles.sectionTitle}>Business Achievement</h2>
+
+          <div style={styles.progressHeader}>
+            <span>
+              Target: Rs. {targetSales.toLocaleString()}
+            </span>
+
+            <strong>
+              {Math.round(salesPercentage)}%
+            </strong>
+          </div>
+
+          <div style={styles.progressBackground}>
+            <div
+              style={{
+                ...styles.progressFill,
+                width: `${salesPercentage}%`,
+              }}
             />
           </div>
 
-          <div style={{ marginTop: "25px" }}>
-            <strong>Business Achievement</strong>
+          <p style={styles.smallText}>
+            Actual Business: Rs. {achievedSales.toLocaleString()}
+          </p>
+        </section>
 
+        {/* EXPENSE */}
+        <section style={styles.card}>
+          <h2 style={styles.sectionTitle}>Expense Utilization</h2>
+
+          <div style={styles.progressHeader}>
+            <span>
+              Budget: Rs. {approvedBudget.toLocaleString()}
+            </span>
+
+            <strong>
+              {Math.round(expensePercentage)}%
+            </strong>
+          </div>
+
+          <div style={styles.progressBackground}>
             <div
               style={{
-                marginTop: "8px",
-                height: "12px",
-                background: "#e5e7eb",
-                borderRadius: "20px",
-                overflow: "hidden",
+                ...styles.progressFill,
+                width: `${expensePercentage}%`,
               }}
-            >
-              <div
-                style={{
-                  width: `${salesAchievement}%`,
-                  height: "100%",
-                  background: "#1769aa",
-                }}
-              />
-            </div>
-
-            <p style={{ color: "#687386" }}>
-              {salesAchievement.toFixed(1)}% of target
-            </p>
+            />
           </div>
+
+          <p style={styles.smallText}>
+            Actual Expense: Rs. {actualExpense.toLocaleString()}
+          </p>
         </section>
 
         {/* COMPLETION */}
+        <section style={styles.card}>
+          <h2 style={styles.sectionTitle}>
+            Activity Completion
+          </h2>
 
-        <section style={cardStyle}>
-          <h2>Activity Completion</h2>
+          <div style={styles.formGrid}>
+            <label style={styles.label}>
+              Actual Sales / Business
+              <input
+                type="number"
+                value={actualSales}
+                onChange={(e) => setActualSales(e.target.value)}
+                placeholder="0"
+                style={styles.input}
+              />
+            </label>
 
-          <div style={gridStyle}>
-            <Info
-              label="Current Status"
-              value={activity.approval_status || "-"}
-            />
+            <label style={styles.label}>
+              Completion Date
+              <input
+                type="date"
+                value={completionDate}
+                onChange={(e) => setCompletionDate(e.target.value)}
+                style={styles.input}
+              />
+            </label>
 
-            <Info
-              label="Completion Date"
-              value={activity.completion_date || "Not completed"}
-            />
-
-            <Info
-              label="Completion Remarks"
-              value={activity.completion_remarks || "No remarks"}
-            />
+            <label style={styles.label}>
+              Activity Status
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                style={styles.input}
+              >
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="completed">Completed</option>
+                <option value="rejected">Rejected</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </label>
           </div>
 
-          <p style={{ color: "#687386" }}>
-            Completion fields ko hum next database update mein add karenge.
-            Filhaal activity status aur financial history yahan available hai.
-          </p>
+          <label style={styles.label}>
+            Completion Remarks
+            <textarea
+              value={completionRemarks}
+              onChange={(e) => setCompletionRemarks(e.target.value)}
+              placeholder="Activity completion details..."
+              rows={4}
+              style={styles.textarea}
+            />
+          </label>
+
+          <button
+            onClick={saveCompletion}
+            disabled={saving}
+            style={styles.primaryButton}
+          >
+            {saving ? "Saving..." : "Save Activity Completion"}
+          </button>
         </section>
 
-        {/* ADJUSTMENT FORM */}
+        {/* ADJUSTMENT */}
+        <section style={styles.card}>
+          <h2 style={styles.sectionTitle}>
+            Recovery / Adjustment
+          </h2>
 
-        <section style={cardStyle}>
-          <h2>Adjustment / Recovery</h2>
-
-          <p style={{ color: "#687386" }}>
-            Agar approved activity amount ka koi hissa approved process ke
-            mutabiq recover/return ya adjust karna ho, yahan separate entry
-            banayein. Original activity record delete nahi hoga.
+          <p style={styles.warningText}>
+            Adjustment original activity ko delete nahi karta. Har recovery
+            ya adjustment ka separate record maintain hota hai.
           </p>
 
-          <div
-            style={{
-              background: "#f1f5f9",
-              padding: "15px",
-              borderRadius: "10px",
-              marginBottom: "20px",
-            }}
-          >
-            <strong>
-              Remaining Adjustment Amount:
-            </strong>
-
-            <span style={{ marginLeft: "8px" }}>
-              Rs. {money(remainingAdjustment)}
-            </span>
-          </div>
-
           <form onSubmit={addAdjustment}>
-            <div style={gridStyle}>
-              <div>
-                <label>Adjustment Type</label>
+            <div style={styles.formGrid}>
 
+              <label style={styles.label}>
+                Adjustment Type
                 <select
-                  name="adjustment_type"
-                  value={form.adjustment_type}
-                  onChange={handleChange}
-                  style={inputStyle}
+                  value={adjustmentType}
+                  onChange={(e) => setAdjustmentType(e.target.value)}
+                  style={styles.input}
                 >
-                  <option value="recovery">
-                    Recovery
-                  </option>
-
-                  <option value="partial_return">
-                    Partial Return
-                  </option>
-
-                  <option value="full_return">
-                    Full Return
-                  </option>
-
-                  <option value="other">
-                    Other Adjustment
-                  </option>
+                  <option value="recovery">Recovery</option>
+                  <option value="partial_return">Partial Return</option>
+                  <option value="full_return">Full Return</option>
+                  <option value="other">Other</option>
                 </select>
-              </div>
+              </label>
 
-              <div>
-                <label>Amount *</label>
-
+              <label style={styles.label}>
+                Amount
                 <input
                   type="number"
-                  min="1"
-                  name="amount"
-                  value={form.amount}
-                  onChange={handleChange}
-                  placeholder="Enter amount"
-                  style={inputStyle}
+                  value={adjustmentAmount}
+                  onChange={(e) => setAdjustmentAmount(e.target.value)}
+                  placeholder="0"
+                  style={styles.input}
                 />
-              </div>
+              </label>
 
-              <div>
-                <label>Adjustment Date</label>
-
+              <label style={styles.label}>
+                Adjustment Date
                 <input
                   type="date"
-                  name="adjustment_date"
-                  value={form.adjustment_date}
-                  onChange={handleChange}
-                  style={inputStyle}
+                  value={adjustmentDate}
+                  onChange={(e) => setAdjustmentDate(e.target.value)}
+                  style={styles.input}
                 />
-              </div>
+              </label>
 
-              <div>
-                <label>Reference / Voucher No.</label>
-
+              <label style={styles.label}>
+                Reference / Voucher No.
                 <input
-                  name="reference_no"
-                  value={form.reference_no}
-                  onChange={handleChange}
-                  placeholder="Reference number"
-                  style={inputStyle}
+                  type="text"
+                  value={adjustmentReference}
+                  onChange={(e) =>
+                    setAdjustmentReference(e.target.value)
+                  }
+                  style={styles.input}
                 />
-              </div>
+              </label>
 
-              <div>
-                <label>Approved By</label>
-
+              <label style={styles.label}>
+                Approved By
                 <input
-                  name="approved_by"
-                  value={form.approved_by}
-                  onChange={handleChange}
+                  type="text"
+                  value={adjustmentApprovedBy}
+                  onChange={(e) =>
+                    setAdjustmentApprovedBy(e.target.value)
+                  }
                   placeholder="Name / designation"
-                  style={inputStyle}
+                  style={styles.input}
                 />
-              </div>
+              </label>
 
-              <div>
-                <label>Supporting Document</label>
-
+              <label style={styles.label}>
+                Supporting Document
                 <input
-                  name="supporting_document"
-                  value={form.supporting_document}
-                  onChange={handleChange}
+                  type="text"
+                  value={adjustmentDocument}
+                  onChange={(e) =>
+                    setAdjustmentDocument(e.target.value)
+                  }
                   placeholder="Document reference"
-                  style={inputStyle}
+                  style={styles.input}
                 />
-              </div>
+              </label>
             </div>
 
-            <div style={{ marginTop: "18px" }}>
-              <label>Reason *</label>
-
+            <label style={styles.label}>
+              Reason
               <textarea
-                name="reason"
-                value={form.reason}
-                onChange={handleChange}
-                rows="3"
-                placeholder="Reason for adjustment / recovery"
-                style={inputStyle}
+                value={adjustmentReason}
+                onChange={(e) => setAdjustmentReason(e.target.value)}
+                placeholder="Adjustment / recovery reason"
+                rows={3}
+                style={styles.textarea}
               />
-            </div>
+            </label>
 
-            <div style={{ marginTop: "18px" }}>
-              <label>Notes</label>
-
+            <label style={styles.label}>
+              Notes
               <textarea
-                name="notes"
-                value={form.notes}
-                onChange={handleChange}
-                rows="3"
+                value={adjustmentNotes}
+                onChange={(e) => setAdjustmentNotes(e.target.value)}
                 placeholder="Additional notes"
-                style={inputStyle}
+                rows={3}
+                style={styles.textarea}
               />
-            </div>
+            </label>
 
             <button
               type="submit"
-              disabled={saving || remainingAdjustment <= 0}
-              style={{
-                marginTop: "18px",
-                background:
-                  remainingAdjustment > 0
-                    ? "#1769aa"
-                    : "#9ca3af",
-                color: "white",
-                border: "none",
-                padding: "12px 22px",
-                borderRadius: "8px",
-                cursor:
-                  remainingAdjustment > 0
-                    ? "pointer"
-                    : "not-allowed",
-                fontWeight: "bold",
-              }}
+              disabled={saving}
+              style={styles.secondaryButton}
             >
-              {saving ? "Saving..." : "Add Adjustment"}
+              {saving ? "Saving..." : "Add Recovery / Adjustment"}
             </button>
           </form>
         </section>
 
         {/* ADJUSTMENT HISTORY */}
-
-        <section style={cardStyle}>
-          <h2>Adjustment / Recovery History</h2>
+        <section style={styles.card}>
+          <h2 style={styles.sectionTitle}>
+            Adjustment History
+          </h2>
 
           {adjustments.length === 0 ? (
-            <p style={{ color: "#687386" }}>
-              Abhi koi adjustment/recovery record nahi hai.
-            </p>
+            <div style={styles.empty}>
+              No recovery or adjustment recorded yet.
+            </div>
           ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table
-                style={{
-                  width: "100%",
-                  borderCollapse: "collapse",
-                  minWidth: "900px",
-                }}
-              >
+            <div style={styles.tableWrapper}>
+              <table style={styles.table}>
                 <thead>
-                  <tr style={{ background: "#f1f4f8" }}>
-                    <th style={thStyle}>Date</th>
-                    <th style={thStyle}>Type</th>
-                    <th style={thStyle}>Amount</th>
-                    <th style={thStyle}>Reason</th>
-                    <th style={thStyle}>Reference</th>
-                    <th style={thStyle}>Approved By</th>
-                    <th style={thStyle}>Action</th>
+                  <tr>
+                    <th style={styles.th}>Date</th>
+                    <th style={styles.th}>Type</th>
+                    <th style={styles.th}>Amount</th>
+                    <th style={styles.th}>Reason</th>
+                    <th style={styles.th}>Reference</th>
+                    <th style={styles.th}>Approved By</th>
+                    <th style={styles.th}>Action</th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {adjustments.map((item) => (
                     <tr key={item.id}>
-                      <td style={tdStyle}>
-                        {item.adjustment_date}
+                      <td style={styles.td}>
+                        {item.adjustment_date || "-"}
                       </td>
 
-                      <td style={tdStyle}>
-                        {item.adjustment_type}
+                      <td style={styles.td}>
+                        {formatAdjustmentType(item.adjustment_type)}
                       </td>
 
-                      <td style={tdStyle}>
-                        Rs. {money(item.amount)}
+                      <td style={styles.td}>
+                        Rs. {Number(item.amount || 0).toLocaleString()}
                       </td>
 
-                      <td style={tdStyle}>
-                        {item.reason}
+                      <td style={styles.td}>
+                        {item.reason || "-"}
                       </td>
 
-                      <td style={tdStyle}>
+                      <td style={styles.td}>
                         {item.reference_no || "-"}
                       </td>
 
-                      <td style={tdStyle}>
+                      <td style={styles.td}>
                         {item.approved_by || "-"}
                       </td>
 
-                      <td style={tdStyle}>
+                      <td style={styles.td}>
                         <button
-                          onClick={() =>
-                            deleteAdjustment(item.id)
-                          }
-                          style={deleteButton}
+                          onClick={() => deleteAdjustment(item.id)}
+                          style={styles.deleteButton}
                         >
                           Delete
                         </button>
@@ -664,6 +706,35 @@ export default function ActivityDetailsPage({ params }) {
             </div>
           )}
         </section>
+
+        {/* DOCUMENT / PAYMENT INFO */}
+        <section style={styles.card}>
+          <h2 style={styles.sectionTitle}>
+            Supporting Information
+          </h2>
+
+          <div style={styles.grid}>
+            <Info
+              label="Payment / Voucher Reference"
+              value={activity.payment_reference || "-"}
+            />
+
+            <Info
+              label="Supporting Document"
+              value={activity.supporting_document || "-"}
+            />
+
+            <Info
+              label="Created At"
+              value={
+                activity.created_at
+                  ? new Date(activity.created_at).toLocaleString()
+                  : "-"
+              }
+            />
+          </div>
+        </section>
+
       </div>
     </main>
   );
@@ -671,160 +742,309 @@ export default function ActivityDetailsPage({ params }) {
 
 function Info({ label, value }) {
   return (
-    <div>
-      <div
-        style={{
-          fontSize: "12px",
-          color: "#687386",
-          marginBottom: "5px",
-        }}
-      >
-        {label}
-      </div>
-
-      <strong style={{ color: "#172033" }}>
-        {value}
-      </strong>
+    <div style={styles.infoItem}>
+      <span style={styles.infoLabel}>{label}</span>
+      <strong style={styles.infoValue}>{value}</strong>
     </div>
   );
 }
 
 function SummaryCard({ title, value }) {
   return (
-    <div
-      style={{
-        background: "#f8fafc",
-        border: "1px solid #e5e7eb",
-        borderRadius: "10px",
-        padding: "18px",
-      }}
-    >
-      <div
-        style={{
-          color: "#687386",
-          fontSize: "13px",
-          marginBottom: "7px",
-        }}
-      >
-        {title}
-      </div>
-
-      <strong
-        style={{
-          fontSize: "20px",
-          color: "#172033",
-        }}
-      >
-        {value}
-      </strong>
+    <div style={styles.summaryCard}>
+      <span style={styles.summaryTitle}>{title}</span>
+      <strong style={styles.summaryValue}>{value}</strong>
     </div>
   );
 }
 
-const pageStyle = {
-  minHeight: "100vh",
-  background: "#f5f7fb",
-  padding: "30px",
-  fontFamily: "Arial, sans-serif",
-};
+function formatAdjustmentType(type) {
+  if (type === "partial_return") return "Partial Return";
+  if (type === "full_return") return "Full Return";
+  if (type === "recovery") return "Recovery";
+  return "Other";
+}
 
-const containerStyle = {
-  maxWidth: "1400px",
-  margin: "0 auto",
-};
+const styles = {
+  page: {
+    minHeight: "100vh",
+    background: "#f5f7fb",
+    padding: "30px 16px",
+    fontFamily:
+      "Arial, Helvetica, sans-serif",
+    color: "#172033",
+  },
 
-const headerStyle = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: "15px",
-  flexWrap: "wrap",
-  marginBottom: "25px",
-};
+  container: {
+    maxWidth: "1200px",
+    margin: "0 auto",
+  },
 
-const cardStyle = {
-  background: "white",
-  borderRadius: "14px",
-  padding: "25px",
-  boxShadow: "0 4px 18px rgba(0,0,0,0.06)",
-  marginBottom: "25px",
-};
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: "20px",
+    marginBottom: "20px",
+    flexWrap: "wrap",
+  },
 
-const sectionHeader = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: "15px",
-  marginBottom: "25px",
-};
+  title: {
+    margin: "12px 0 5px",
+    fontSize: "30px",
+  },
 
-const gridStyle = {
-  display: "grid",
-  gridTemplateColumns:
-    "repeat(auto-fit, minmax(220px, 1fr))",
-  gap: "20px",
-};
+  subtitle: {
+    margin: 0,
+    color: "#667085",
+  },
 
-const summaryGrid = {
-  display: "grid",
-  gridTemplateColumns:
-    "repeat(auto-fit, minmax(190px, 1fr))",
-  gap: "15px",
-};
+  backButton: {
+    border: "none",
+    background: "#e8edf5",
+    color: "#344054",
+    padding: "9px 14px",
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontWeight: "600",
+  },
 
-const inputStyle = {
-  width: "100%",
-  boxSizing: "border-box",
-  marginTop: "7px",
-  padding: "11px 12px",
-  border: "1px solid #d5dbe5",
-  borderRadius: "8px",
-  fontSize: "14px",
-  background: "white",
-};
+  statusBox: {
+    background: "#fff",
+    padding: "14px",
+    borderRadius: "12px",
+    border: "1px solid #e4e7ec",
+    minWidth: "180px",
+  },
 
-const statusBadge = {
-  padding: "7px 12px",
-  borderRadius: "20px",
-  fontSize: "12px",
-  fontWeight: "bold",
-};
+  statusLabel: {
+    display: "block",
+    fontSize: "12px",
+    color: "#667085",
+    marginBottom: "6px",
+  },
 
-const backButton = {
-  textDecoration: "none",
-  background: "#172033",
-  color: "white",
-  padding: "11px 18px",
-  borderRadius: "8px",
-};
+  statusSelect: {
+    width: "100%",
+    padding: "9px",
+    borderRadius: "7px",
+    border: "1px solid #d0d5dd",
+    background: "#fff",
+  },
 
-const notesBox = {
-  marginTop: "25px",
-  padding: "15px",
-  background: "#f8fafc",
-  borderRadius: "10px",
-};
+  card: {
+    background: "#fff",
+    border: "1px solid #e4e7ec",
+    borderRadius: "14px",
+    padding: "22px",
+    marginBottom: "18px",
+    boxShadow: "0 2px 8px rgba(16,24,40,0.04)",
+  },
 
-const thStyle = {
-  textAlign: "left",
-  padding: "13px",
-  borderBottom: "1px solid #ddd",
-  fontSize: "13px",
-  whiteSpace: "nowrap",
-};
+  sectionTitle: {
+    marginTop: 0,
+    marginBottom: "18px",
+    fontSize: "20px",
+  },
 
-const tdStyle = {
-  padding: "13px",
-  borderBottom: "1px solid #eee",
-  fontSize: "13px",
-  verticalAlign: "top",
-};
+  grid: {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: "15px",
+  },
 
-const deleteButton = {
-  border: "none",
-  background: "#dc2626",
-  color: "white",
-  padding: "7px 10px",
-  borderRadius: "6px",
-  cursor: "pointer",
+  infoItem: {
+    background: "#f8fafc",
+    borderRadius: "9px",
+    padding: "13px",
+  },
+
+  infoLabel: {
+    display: "block",
+    fontSize: "12px",
+    color: "#667085",
+    marginBottom: "6px",
+  },
+
+  infoValue: {
+    fontSize: "14px",
+  },
+
+  notesBox: {
+    marginTop: "18px",
+    padding: "14px",
+    background: "#f8fafc",
+    borderRadius: "9px",
+  },
+
+  summaryGrid: {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: "14px",
+  },
+
+  summaryCard: {
+    border: "1px solid #e4e7ec",
+    borderRadius: "10px",
+    padding: "16px",
+    background: "#fafbfc",
+  },
+
+  summaryTitle: {
+    display: "block",
+    fontSize: "12px",
+    color: "#667085",
+    marginBottom: "8px",
+  },
+
+  summaryValue: {
+    fontSize: "19px",
+  },
+
+  progressHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    marginBottom: "8px",
+    fontSize: "14px",
+  },
+
+  progressBackground: {
+    height: "12px",
+    background: "#e9edf3",
+    borderRadius: "20px",
+    overflow: "hidden",
+  },
+
+  progressFill: {
+    height: "100%",
+    background: "#16a34a",
+    borderRadius: "20px",
+    transition: "width 0.3s ease",
+  },
+
+  smallText: {
+    color: "#667085",
+    fontSize: "13px",
+  },
+
+  formGrid: {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: "15px",
+    marginBottom: "15px",
+  },
+
+  label: {
+    display: "block",
+    fontSize: "13px",
+    fontWeight: "600",
+    marginBottom: "14px",
+  },
+
+  input: {
+    width: "100%",
+    boxSizing: "border-box",
+    marginTop: "7px",
+    padding: "11px",
+    border: "1px solid #d0d5dd",
+    borderRadius: "8px",
+    background: "#fff",
+    fontSize: "14px",
+  },
+
+  textarea: {
+    width: "100%",
+    boxSizing: "border-box",
+    marginTop: "7px",
+    padding: "11px",
+    border: "1px solid #d0d5dd",
+    borderRadius: "8px",
+    resize: "vertical",
+    fontFamily: "inherit",
+    fontSize: "14px",
+  },
+
+  primaryButton: {
+    border: "none",
+    background: "#2563eb",
+    color: "#fff",
+    padding: "11px 18px",
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontWeight: "600",
+  },
+
+  secondaryButton: {
+    border: "none",
+    background: "#16a34a",
+    color: "#fff",
+    padding: "11px 18px",
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontWeight: "600",
+  },
+
+  deleteButton: {
+    border: "none",
+    background: "#dc2626",
+    color: "#fff",
+    padding: "7px 10px",
+    borderRadius: "6px",
+    cursor: "pointer",
+    fontSize: "12px",
+  },
+
+  warningText: {
+    background: "#fff7ed",
+    border: "1px solid #fed7aa",
+    color: "#9a3412",
+    padding: "12px",
+    borderRadius: "8px",
+    fontSize: "13px",
+    marginBottom: "18px",
+  },
+
+  message: {
+    background: "#ecfdf3",
+    border: "1px solid #abefc6",
+    color: "#067647",
+    padding: "12px 15px",
+    borderRadius: "8px",
+    marginBottom: "18px",
+  },
+
+  empty: {
+    padding: "20px",
+    textAlign: "center",
+    color: "#667085",
+    background: "#f8fafc",
+    borderRadius: "8px",
+  },
+
+  tableWrapper: {
+    overflowX: "auto",
+  },
+
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
+    minWidth: "850px",
+  },
+
+  th: {
+    textAlign: "left",
+    padding: "11px",
+    background: "#f8fafc",
+    borderBottom: "1px solid #e4e7ec",
+    fontSize: "12px",
+  },
+
+  td: {
+    padding: "11px",
+    borderBottom: "1px solid #eaecf0",
+    fontSize: "13px",
+  },
 };
