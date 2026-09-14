@@ -44,14 +44,35 @@ export default function Home() {
   }
 
   const cards = [
-    { title: "Products", value: "0", icon: "💊" },
-    { title: "Current Stock", value: "0", icon: "📦" },
-    { title: "Customers", value: "0", icon: "🏥" },
-    { title: "Suppliers", value: "0", icon: "🏭" },
-    { title: "Sales", value: "Rs. 0", icon: "🧾" },
-    { title: "Purchases", value: "Rs. 0", icon: "🛒" },
-    { title: "Receivables", value: "Rs. 0", icon: "💰" },
-    { title: "Payables", value: "Rs. 0", icon: "💸" },
+    { title: "Products", value: "0", icon: "💊", link: "/products" },
+    { title: "Current Stock", value: "0", icon: "📦", link: "#" },
+    { title: "Customers", value: "0", icon: "🏥", link: "/customers" },
+    { title: "Suppliers", value: "0", icon: "🏭", link: "/companies" },
+    { title: "Sales", value: "Rs. 0", icon: "🧾", link: "#" },
+    { title: "Purchases", value: "Rs. 0", icon: "🛒", link: "/purchases" },
+    { title: "Receivables", value: "Rs. 0", icon: "💰", link: "#" },
+    { title: "Payables", value: "Rs. 0", icon: "💸", link: "#" },
+  ];
+
+  const sidebarItems = [
+    { label: "💊 Products", link: "/products" },
+    { label: "📦 Stock", link: "#" },
+    { label: "🏥 Customers", link: "/customers" },
+    { label: "🏭 Suppliers", link: "/companies" },
+    { label: "🧾 Sales", link: "#" },
+    { label: "🛒 Purchases", link: "/purchases" },
+    { label: "💰 Accounts", link: "#" },
+    { label: "📈 Reports", link: "#" },
+    { label: "👥 Users", link: "#" },
+    { label: "⚙️ Settings", link: "#" },
+  ];
+
+  const quickActions = [
+    { label: "Add Product", link: "/products" },
+    { label: "Add Customer", link: "/customers" },
+    { label: "Add Supplier", link: "/companies" },
+    { label: "New Sale", link: "#" },
+    { label: "New Purchase", link: "/purchases" },
   ];
 
   return (
@@ -62,7 +83,6 @@ export default function Home() {
         fontFamily: "Arial, sans-serif",
       }}
     >
-      {/* Header */}
       <header
         style={{
           background: "#111827",
@@ -78,6 +98,7 @@ export default function Home() {
           <h1 style={{ margin: 0, fontSize: "22px" }}>
             Al Wahab Enterprises
           </h1>
+
           <p
             style={{
               margin: "5px 0 0",
@@ -113,7 +134,6 @@ export default function Home() {
           minHeight: "calc(100vh - 80px)",
         }}
       >
-        {/* Sidebar */}
         <aside
           style={{
             width: "220px",
@@ -135,34 +155,30 @@ export default function Home() {
             📊 Dashboard
           </div>
 
-          {[
-            "💊 Products",
-            "📦 Stock",
-            "🏥 Customers",
-            "🏭 Suppliers",
-            "🧾 Sales",
-            "🛒 Purchases",
-            "💰 Accounts",
-            "📈 Reports",
-            "👥 Users",
-            "⚙️ Settings",
-          ].map((item) => (
-            <div
-              key={item}
+          {sidebarItems.map((item) => (
+            <a
+              key={item.label}
+              href={item.link}
               style={{
+                display: "block",
                 padding: "12px",
                 marginBottom: "4px",
                 borderRadius: "7px",
                 color: "#d1d5db",
-                cursor: "pointer",
+                cursor: item.link === "#" ? "default" : "pointer",
+                textDecoration: "none",
+              }}
+              onClick={(e) => {
+                if (item.link === "#") {
+                  e.preventDefault();
+                }
               }}
             >
-              {item}
-            </div>
+              {item.label}
+            </a>
           ))}
         </aside>
 
-        {/* Main Content */}
         <section
           style={{
             flex: 1,
@@ -190,7 +206,6 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Dashboard Cards */}
           <div
             style={{
               display: "grid",
@@ -200,14 +215,25 @@ export default function Home() {
             }}
           >
             {cards.map((card) => (
-              <div
+              <a
                 key={card.title}
+                href={card.link}
+                onClick={(e) => {
+                  if (card.link === "#") {
+                    e.preventDefault();
+                  }
+                }}
                 style={{
+                  display: "block",
                   background: "#fff",
                   padding: "20px",
                   borderRadius: "12px",
                   boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
                   border: "1px solid #e5e7eb",
+                  textDecoration: "none",
+                  color: "inherit",
+                  cursor:
+                    card.link === "#" ? "default" : "pointer",
                 }}
               >
                 <div style={{ fontSize: "28px" }}>
@@ -233,11 +259,10 @@ export default function Home() {
                 >
                   {card.value}
                 </h3>
-              </div>
+              </a>
             ))}
           </div>
 
-          {/* Quick Actions */}
           <div
             style={{
               marginTop: "25px",
@@ -256,31 +281,35 @@ export default function Home() {
                 gap: "10px",
               }}
             >
-              {[
-                "Add Product",
-                "Add Customer",
-                "Add Supplier",
-                "New Sale",
-                "New Purchase",
-              ].map((action) => (
-                <button
-                  key={action}
+              {quickActions.map((action) => (
+                <a
+                  key={action.label}
+                  href={action.link}
+                  onClick={(e) => {
+                    if (action.link === "#") {
+                      e.preventDefault();
+                    }
+                  }}
                   style={{
+                    display: "inline-block",
                     padding: "11px 15px",
                     background: "#111827",
                     color: "#fff",
                     border: "none",
                     borderRadius: "7px",
-                    cursor: "pointer",
+                    cursor:
+                      action.link === "#"
+                        ? "default"
+                        : "pointer",
+                    textDecoration: "none",
                   }}
                 >
-                  + {action}
-                </button>
+                  + {action.label}
+                </a>
               ))}
             </div>
           </div>
 
-          {/* Recent Activity */}
           <div
             style={{
               marginTop: "25px",
