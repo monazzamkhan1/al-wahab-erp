@@ -23,8 +23,9 @@ export default function PurchaseHistoryPage() {
       >
         <h1
           style={{
-            marginTop: 0,
+            margin: "0 0 10px 0",
             color: "#111827",
+            fontSize: "28px",
           }}
         >
           Purchase History
@@ -32,22 +33,53 @@ export default function PurchaseHistoryPage() {
 
         <p
           style={{
+            margin: "0 0 25px 0",
             color: "#6b7280",
+            fontSize: "15px",
           }}
         >
           Purchase history module is ready.
         </p>
 
+        <div
+          style={{
+            padding: "20px",
+            background: "#f9fafb",
+            border: "1px solid #e5e7eb",
+            borderRadius: "10px",
+            marginBottom: "20px",
+          }}
+        >
+          <h2
+            style={{
+              margin: "0 0 8px 0",
+              fontSize: "18px",
+              color: "#374151",
+            }}
+          >
+            No Purchase Records
+          </h2>
+
+          <p
+            style={{
+              margin: 0,
+              color: "#6b7280",
+            }}
+          >
+            Purchase invoices will appear here after they are recorded.
+          </p>
+        </div>
+
         <a
           href="/purchases"
           style={{
             display: "inline-block",
-            marginTop: "15px",
-            padding: "10px 16px",
+            padding: "11px 18px",
             background: "#2563eb",
             color: "#ffffff",
             textDecoration: "none",
             borderRadius: "8px",
+            fontWeight: "600",
           }}
         >
           Go to Purchases
