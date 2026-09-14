@@ -397,7 +397,7 @@ export default function PurchasesPage() {
                       ? `${product.product_code} - `
                       : ""}
                     {product.product_name}
-                    {product.pack_size
+                    {product.pack_size}
                       ? ` (${product.pack_size})`
                       : ""}
                   </option>
