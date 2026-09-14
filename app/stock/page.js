@@ -1,3 +1,4 @@
+```jsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -66,9 +67,11 @@ export default function StockPage() {
 
   const productMap = useMemo(() => {
     const map = {};
+
     products.forEach((product) => {
       map[product.id] = product;
     });
+
     return map;
   }, [products]);
 
@@ -139,9 +142,15 @@ export default function StockPage() {
           <p>Product, batch aur stock movement management</p>
         </div>
 
-        <button className="refreshBtn" onClick={loadStock}>
-          ↻ Refresh
-        </button>
+        <div className="topActions">
+          <a href="/" className="dashboardBtn">
+            ← Dashboard
+          </a>
+
+          <button className="refreshBtn" onClick={loadStock}>
+            ↻ Refresh
+          </button>
+        </div>
       </div>
 
       {message && <div className="message">{message}</div>}
@@ -215,15 +224,23 @@ export default function StockPage() {
                   return (
                     <tr key={product.id}>
                       <td>{product.product_code || "-"}</td>
+
                       <td>
                         <strong>{product.product_name}</strong>
                       </td>
+
                       <td>{product.generic_name || "-"}</td>
+
                       <td>{product.pack_size || "-"}</td>
+
                       <td>
                         <strong>{quantity.toLocaleString()}</strong>
                       </td>
-                      <td>{Number(product.min_stock || 0).toLocaleString()}</td>
+
+                      <td>
+                        {Number(product.min_stock || 0).toLocaleString()}
+                      </td>
+
                       <td>
                         <span className={status.className}>
                           {status.text}
@@ -249,7 +266,9 @@ export default function StockPage() {
         {loading ? (
           <div className="empty">Loading batches...</div>
         ) : batches.length === 0 ? (
-          <div className="empty">Abhi koi stock batch available nahi.</div>
+          <div className="empty">
+            Abhi koi stock batch available nahi.
+          </div>
         ) : (
           <div className="tableWrap">
             <table>
@@ -270,18 +289,27 @@ export default function StockPage() {
                     <td>
                       {productMap[batch.product_id]?.product_name || "-"}
                     </td>
+
                     <td>
                       <strong>{batch.batch_no || "-"}</strong>
                     </td>
+
                     <td>{formatDate(batch.expiry_date)}</td>
+
                     <td>
-                      Rs. {Number(batch.purchase_rate || 0).toLocaleString()}
+                      Rs.{" "}
+                      {Number(batch.purchase_rate || 0).toLocaleString()}
                     </td>
+
                     <td>
-                      Rs. {Number(batch.sale_rate || 0).toLocaleString()}
+                      Rs.{" "}
+                      {Number(batch.sale_rate || 0).toLocaleString()}
                     </td>
+
                     <td>
-                      <strong>{Number(batch.quantity || 0).toLocaleString()}</strong>
+                      <strong>
+                        {Number(batch.quantity || 0).toLocaleString()}
+                      </strong>
                     </td>
                   </tr>
                 ))}
@@ -302,7 +330,9 @@ export default function StockPage() {
         {loading ? (
           <div className="empty">Loading movements...</div>
         ) : movements.length === 0 ? (
-          <div className="empty">Abhi koi stock movement nahi.</div>
+          <div className="empty">
+            Abhi koi stock movement nahi.
+          </div>
         ) : (
           <div className="tableWrap">
             <table>
@@ -320,7 +350,11 @@ export default function StockPage() {
                 {movements.map((movement) => (
                   <tr key={movement.id}>
                     <td>{formatDate(movement.movement_date)}</td>
-                    <td>{getMovementProductName(movement.product_id)}</td>
+
+                    <td>
+                      {getMovementProductName(movement.product_id)}
+                    </td>
+
                     <td>
                       <span
                         className={
@@ -329,10 +363,16 @@ export default function StockPage() {
                             : "movement in"
                         }
                       >
-                        {movement.movement_type.replaceAll("_", " ").toUpperCase()}
+                        {movement.movement_type
+                          .replaceAll("_", " ")
+                          .toUpperCase()}
                       </span>
                     </td>
-                    <td>{Number(movement.quantity || 0).toLocaleString()}</td>
+
+                    <td>
+                      {Number(movement.quantity || 0).toLocaleString()}
+                    </td>
+
                     <td>{movement.reference_no || "-"}</td>
                   </tr>
                 ))}
@@ -358,6 +398,12 @@ export default function StockPage() {
           gap: 20px;
         }
 
+        .topActions {
+          display: flex;
+          gap: 10px;
+          align-items: center;
+        }
+
         h1 {
           margin: 0;
           font-size: 28px;
@@ -369,6 +415,21 @@ export default function StockPage() {
           color: #6b7280;
         }
 
+        .dashboardBtn {
+          display: inline-block;
+          background: #2563eb;
+          color: white;
+          padding: 11px 18px;
+          border-radius: 8px;
+          text-decoration: none;
+          font-weight: 600;
+          cursor: pointer;
+        }
+
+        .dashboardBtn:hover {
+          opacity: 0.9;
+        }
+
         .refreshBtn {
           border: none;
           background: #111827;
@@ -376,6 +437,10 @@ export default function StockPage() {
           padding: 11px 18px;
           border-radius: 8px;
           cursor: pointer;
+        }
+
+        .refreshBtn:hover {
+          opacity: 0.9;
         }
 
         .message {
@@ -439,6 +504,10 @@ export default function StockPage() {
           border: 1px solid #d1d5db;
           border-radius: 8px;
           outline: none;
+        }
+
+        .searchInput:focus {
+          border-color: #2563eb;
         }
 
         .tableWrap {
@@ -519,6 +588,11 @@ export default function StockPage() {
             flex-direction: column;
           }
 
+          .topActions {
+            width: 100%;
+            flex-wrap: wrap;
+          }
+
           .summaryGrid {
             grid-template-columns: repeat(2, 1fr);
           }
@@ -530,6 +604,7 @@ export default function StockPage() {
 
           .searchInput {
             width: 100%;
+            box-sizing: border-box;
           }
         }
 
@@ -537,8 +612,15 @@ export default function StockPage() {
           .summaryGrid {
             grid-template-columns: 1fr;
           }
+
+          .dashboardBtn,
+          .refreshBtn {
+            flex: 1;
+            text-align: center;
+          }
         }
       `}</style>
     </main>
   );
 }
+```
