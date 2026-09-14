@@ -1,4 +1,3 @@
-```jsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -100,6 +99,13 @@ export default function StockPage() {
     return stock;
   }, [batches]);
 
+  const totalStock = useMemo(() => {
+    return Object.values(productStock).reduce(
+      (sum, value) => sum + value,
+      0
+    );
+  }, [productStock]);
+
   function getStockStatus(product) {
     const quantity = productStock[product.id] || 0;
     const minimum = Number(product.min_stock || 0);
@@ -164,9 +170,7 @@ export default function StockPage() {
         <div className="summaryCard">
           <div className="summaryTitle">Total Stock</div>
           <div className="summaryValue">
-            {Object.values(productStock)
-              .reduce((sum, value) => sum + value, 0)
-              .toLocaleString()}
+            {totalStock.toLocaleString()}
           </div>
         </div>
 
@@ -298,17 +302,23 @@ export default function StockPage() {
 
                     <td>
                       Rs.{" "}
-                      {Number(batch.purchase_rate || 0).toLocaleString()}
+                      {Number(
+                        batch.purchase_rate || 0
+                      ).toLocaleString()}
                     </td>
 
                     <td>
                       Rs.{" "}
-                      {Number(batch.sale_rate || 0).toLocaleString()}
+                      {Number(
+                        batch.sale_rate || 0
+                      ).toLocaleString()}
                     </td>
 
                     <td>
                       <strong>
-                        {Number(batch.quantity || 0).toLocaleString()}
+                        {Number(
+                          batch.quantity || 0
+                        ).toLocaleString()}
                       </strong>
                     </td>
                   </tr>
@@ -349,10 +359,14 @@ export default function StockPage() {
               <tbody>
                 {movements.map((movement) => (
                   <tr key={movement.id}>
-                    <td>{formatDate(movement.movement_date)}</td>
+                    <td>
+                      {formatDate(movement.movement_date)}
+                    </td>
 
                     <td>
-                      {getMovementProductName(movement.product_id)}
+                      {getMovementProductName(
+                        movement.product_id
+                      )}
                     </td>
 
                     <td>
@@ -370,10 +384,14 @@ export default function StockPage() {
                     </td>
 
                     <td>
-                      {Number(movement.quantity || 0).toLocaleString()}
+                      {Number(
+                        movement.quantity || 0
+                      ).toLocaleString()}
                     </td>
 
-                    <td>{movement.reference_no || "-"}</td>
+                    <td>
+                      {movement.reference_no || "-"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -437,6 +455,7 @@ export default function StockPage() {
           padding: 11px 18px;
           border-radius: 8px;
           cursor: pointer;
+          font-weight: 600;
         }
 
         .refreshBtn:hover {
@@ -623,4 +642,3 @@ export default function StockPage() {
     </main>
   );
 }
-```
