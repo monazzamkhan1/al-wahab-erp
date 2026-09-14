@@ -1,4 +1,3 @@
-```jsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -166,6 +165,7 @@ export default function PurchasesPage() {
       product_id: productId,
       product_name: product?.product_name || "",
       product_code: product?.product_code || "",
+      pack_size: product?.pack_size || "",
       batch_id: batchId || null,
       batch_no: batchNo.trim(),
       manufacturing_date: manufacturingDate || null,
@@ -291,12 +291,12 @@ export default function PurchasesPage() {
   return (
     <main style={styles.page}>
       <div style={styles.container}>
-
         <div style={styles.header}>
           <div>
             <h1 style={styles.title}>Purchase Management</h1>
             <p style={styles.subtitle}>
-              Supplier purchases, products, batches and payable amounts manage karein.
+              Supplier purchases, products, batches and payable amounts
+              manage karein.
             </p>
           </div>
 
@@ -305,17 +305,12 @@ export default function PurchasesPage() {
           </a>
         </div>
 
-        {message && (
-          <div style={styles.message}>
-            {message}
-          </div>
-        )}
+        {message && <div style={styles.message}>{message}</div>}
 
         <section style={styles.card}>
           <h2 style={styles.sectionTitle}>Purchase Invoice</h2>
 
           <div style={styles.formGrid}>
-
             <label style={styles.label}>
               Supplier *
               <select
@@ -381,7 +376,6 @@ export default function PurchasesPage() {
           <h2 style={styles.sectionTitle}>Add Product</h2>
 
           <div style={styles.formGrid}>
-
             <label style={styles.label}>
               Product *
               <select
@@ -397,9 +391,7 @@ export default function PurchasesPage() {
                       ? `${product.product_code} - `
                       : ""}
                     {product.product_name}
-                    {product.pack_size}
-                      ? ` (${product.pack_size})`
-                      : ""}
+                    {product.pack_size ? ` (${product.pack_size})` : ""}
                   </option>
                 ))}
               </select>
@@ -441,9 +433,7 @@ export default function PurchasesPage() {
               <input
                 type="date"
                 value={manufacturingDate}
-                onChange={(e) =>
-                  setManufacturingDate(e.target.value)
-                }
+                onChange={(e) => setManufacturingDate(e.target.value)}
                 style={styles.input}
               />
             </label>
@@ -453,9 +443,7 @@ export default function PurchasesPage() {
               <input
                 type="date"
                 value={expiryDate}
-                onChange={(e) =>
-                  setExpiryDate(e.target.value)
-                }
+                onChange={(e) => setExpiryDate(e.target.value)}
                 style={styles.input}
               />
             </label>
@@ -476,9 +464,7 @@ export default function PurchasesPage() {
               <input
                 type="number"
                 value={purchaseRate}
-                onChange={(e) =>
-                  setPurchaseRate(e.target.value)
-                }
+                onChange={(e) => setPurchaseRate(e.target.value)}
                 placeholder="0"
                 style={styles.input}
               />
@@ -508,10 +494,8 @@ export default function PurchasesPage() {
           </div>
 
           <div style={styles.lineTotal}>
-            Current Line Amount:
-            <strong>
-              Rs. {calculateLineAmount().toLocaleString()}
-            </strong>
+            <span>Current Line Amount:</span>
+            <strong>Rs. {calculateLineAmount().toLocaleString()}</strong>
           </div>
 
           <button
@@ -524,9 +508,7 @@ export default function PurchasesPage() {
         </section>
 
         <section style={styles.card}>
-          <h2 style={styles.sectionTitle}>
-            Purchase Items
-          </h2>
+          <h2 style={styles.sectionTitle}>Purchase Items</h2>
 
           {items.length === 0 ? (
             <div style={styles.empty}>
@@ -558,20 +540,17 @@ export default function PurchasesPage() {
                         <small>{item.product_code || "-"}</small>
                       </td>
 
-                      <td style={styles.td}>
-                        {item.batch_no}
-                      </td>
+                      <td style={styles.td}>{item.batch_no}</td>
 
                       <td style={styles.td}>
                         {item.expiry_date || "-"}
                       </td>
 
-                      <td style={styles.td}>
-                        {item.quantity}
-                      </td>
+                      <td style={styles.td}>{item.quantity}</td>
 
                       <td style={styles.td}>
-                        Rs. {Number(item.purchase_rate).toLocaleString()}
+                        Rs.{" "}
+                        {Number(item.purchase_rate).toLocaleString()}
                       </td>
 
                       <td style={styles.td}>
@@ -591,9 +570,7 @@ export default function PurchasesPage() {
                       <td style={styles.td}>
                         <button
                           type="button"
-                          onClick={() =>
-                            removeItem(item.tempId)
-                          }
+                          onClick={() => removeItem(item.tempId)}
                           style={styles.deleteButton}
                         >
                           Remove
@@ -610,23 +587,17 @@ export default function PurchasesPage() {
         <section style={styles.totalCard}>
           <div style={styles.totalRow}>
             <span>Grand Total</span>
-            <strong>
-              Rs. {grandTotal.toLocaleString()}
-            </strong>
+            <strong>Rs. {grandTotal.toLocaleString()}</strong>
           </div>
 
           <div style={styles.totalRow}>
             <span>Paid Amount</span>
-            <strong>
-              Rs. {paid.toLocaleString()}
-            </strong>
+            <strong>Rs. {paid.toLocaleString()}</strong>
           </div>
 
           <div style={styles.balanceRow}>
             <span>Supplier Payable</span>
-            <strong>
-              Rs. {balance.toLocaleString()}
-            </strong>
+            <strong>Rs. {balance.toLocaleString()}</strong>
           </div>
 
           <button
@@ -638,7 +609,6 @@ export default function PurchasesPage() {
             {saving ? "Saving Purchase..." : "Save Purchase"}
           </button>
         </section>
-
       </div>
     </main>
   );
@@ -704,8 +674,7 @@ const styles = {
 
   formGrid: {
     display: "grid",
-    gridTemplateColumns:
-      "repeat(auto-fit, minmax(220px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
     gap: "15px",
   },
 
@@ -843,4 +812,3 @@ const styles = {
     fontSize: "19px",
   },
 };
-```
