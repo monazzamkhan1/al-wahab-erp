@@ -205,88 +205,88 @@ export default function PurchasesPage() {
   const balance = Math.max(grandTotal - paid, 0);
 
   async function savePurchase() {
-    setMessage("");
+  setMessage("");
 
-    if (!supplierId) {
-      setMessage("Supplier select karein.");
-      return;
-    }
-
-    if (!invoiceNo.trim()) {
-      setMessage("Invoice No. enter karein.");
-      return;
-    }
-
-    if (items.length === 0) {
-      setMessage("Kam az kam 1 product add karein.");
-      return;
-    }
-
-    if (paid < 0 || paid > grandTotal) {
-      setMessage("Paid Amount total se zyada nahi ho sakta.");
-      return;
-    }
-
-    setSaving(true);
-
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      const { data: purchase, error: purchaseError } = await supabase
-        .from("purchases")
-        .insert({
-          supplier_id: supplierId,
-          invoice_no: invoiceNo.trim(),
-          invoice_date: invoiceDate,
-          total_amount: grandTotal,
-          paid_amount: paid,
-          notes: notes || null,
-          created_by: user?.id || null,
-        })
-        .select()
-        .single();
-
-      if (purchaseError) {
-        throw purchaseError;
-      }
-
-      const purchaseItems = items.map((item) => ({
-        purchase_id: purchase.id,
-        product_id: item.product_id,
-        batch_id: item.batch_id,
-        quantity: item.quantity,
-        purchase_rate: item.purchase_rate,
-        discount: item.discount,
-        tax: item.tax,
-        amount: item.amount,
-        notes: null,
-      }));
-
-      const { error: itemsError } = await supabase
-        .from("purchase_items")
-        .insert(purchaseItems);
-
-      if (itemsError) {
-        throw itemsError;
-      }
-
-      setMessage("Purchase successfully saved.");
-
-      setSupplierId("");
-      setInvoiceNo("");
-      setInvoiceDate(new Date().toISOString().split("T")[0]);
-      setPaidAmount("");
-      setNotes("");
-      setItems([]);
-    } catch (error) {
-      console.error(error);
-      setMessage("Purchase save nahi ho saki: " + error.message);
-    } finally {
-      setSaving(false);
-    }
+  if (!supplierId) {
+    setMessage("Supplier select karein.");
+    return;
   }
+
+  if (!invoiceNo.trim()) {
+    setMessage("Invoice No. enter karein.");
+    return;
+  }
+
+  if (items.length === 0) {
+    setMessage("Kam az kam 1 product add karein.");
+    return;
+  }
+
+  if (paid < 0 || paid > grandTotal) {
+    setMessage("Paid Amount total se zyada nahi ho sakta.");
+    return;
+  }
+
+  setSaving(true);
+
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      throw new Error("User login nahi hai.");
+    }
+
+    const purchaseItems = items.map((item) => ({
+      product_id: item.product_id,
+      batch_id: item.batch_id || null,
+      batch_no: item.batch_no,
+      manufacturing_date: item.manufacturing_date || null,
+      expiry_date: item.expiry_date || null,
+      quantity: item.quantity,
+      purchase_rate: item.purchase_rate,
+      discount: item.discount,
+      tax: item.tax,
+      amount: item.amount,
+    }));
+
+    const { data: purchaseId, error } = await supabase.rpc(
+      "save_purchase_with_stock",
+      {
+        p_supplier_id: supplierId,
+        p_invoice_no: invoiceNo.trim(),
+        p_invoice_date: invoiceDate,
+        p_total_amount: grandTotal,
+        p_paid_amount: paid,
+        p_notes: notes || null,
+        p_created_by: user.id,
+        p_items: purchaseItems,
+      }
+    );
+
+    if (error) {
+      throw error;
+    }
+
+    setMessage(
+      "Purchase successfully saved aur Stock IN update ho gaya. Purchase ID: " +
+        purchaseId
+    );
+
+    setSupplierId("");
+    setInvoiceNo("");
+    setInvoiceDate(new Date().toISOString().split("T")[0]);
+    setPaidAmount("");
+    setNotes("");
+    setItems([]);
+  } catch (error) {
+    console.error(error);
+    setMessage("Purchase save nahi ho saki: " + error.message);
+  } finally {
+    setSaving(false);
+  }
+}
 
   return (
     <main style={styles.page}>
