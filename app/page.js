@@ -8,6 +8,19 @@ export default function Home() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const [dashboardData, setDashboardData] = useState({
+    products: 0,
+    stock: 0,
+    customers: 0,
+    suppliers: 0,
+    sales: 0,
+    purchases: 0,
+    receivables: 0,
+    payables: 0,
+  });
+
+  const [dataLoading, setDataLoading] = useState(true);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
@@ -22,6 +35,99 @@ export default function Home() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  async function loadDashboardData() {
+    setDataLoading(true);
+
+    try {
+      const [
+        productsResult,
+        stockResult,
+        customersResult,
+        suppliersResult,
+        salesResult,
+        purchasesResult,
+      ] = await Promise.all([
+        supabase
+          .from("products")
+          .select("id", { count: "exact", head: true }),
+
+        supabase
+          .from("product_batches")
+          .select("quantity"),
+
+        supabase
+          .from("customers")
+          .select("id", { count: "exact", head: true }),
+
+        supabase
+          .from("companies")
+          .select("id", { count: "exact", head: true })
+          .in("company_type", ["supplier", "both"]),
+
+        supabase
+          .from("sales")
+          .select("total_amount, received_amount"),
+
+        supabase
+          .from("purchases")
+          .select("total_amount, paid_amount"),
+      ]);
+
+      if (productsResult.error) throw productsResult.error;
+      if (stockResult.error) throw stockResult.error;
+      if (customersResult.error) throw customersResult.error;
+      if (suppliersResult.error) throw suppliersResult.error;
+      if (salesResult.error) throw salesResult.error;
+      if (purchasesResult.error) throw purchasesResult.error;
+
+      const totalStock = (stockResult.data || []).reduce(
+        (sum, item) => sum + Number(item.quantity || 0),
+        0
+      );
+
+      const totalSales = (salesResult.data || []).reduce(
+        (sum, item) => sum + Number(item.total_amount || 0),
+        0
+      );
+
+      const totalReceived = (salesResult.data || []).reduce(
+        (sum, item) => sum + Number(item.received_amount || 0),
+        0
+      );
+
+      const totalPurchases = (purchasesResult.data || []).reduce(
+        (sum, item) => sum + Number(item.total_amount || 0),
+        0
+      );
+
+      const totalPaid = (purchasesResult.data || []).reduce(
+        (sum, item) => sum + Number(item.paid_amount || 0),
+        0
+      );
+
+      setDashboardData({
+        products: productsResult.count || 0,
+        stock: totalStock,
+        customers: customersResult.count || 0,
+        suppliers: suppliersResult.count || 0,
+        sales: totalSales,
+        purchases: totalPurchases,
+        receivables: Math.max(totalSales - totalReceived, 0),
+        payables: Math.max(totalPurchases - totalPaid, 0),
+      });
+    } catch (error) {
+      console.error("Dashboard data error:", error);
+    } finally {
+      setDataLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (session) {
+      loadDashboardData();
+    }
+  }, [session]);
 
   if (loading) {
     return (
@@ -43,20 +149,70 @@ export default function Home() {
     return <Login />;
   }
 
+  const formatNumber = (value) => {
+    return Number(value || 0).toLocaleString("en-PK");
+  };
+
+  const formatCurrency = (value) => {
+    return "Rs. " + Number(value || 0).toLocaleString("en-PK");
+  };
+
   const cards = [
-    { title: "Products", value: "0", icon: "💊", link: "/products" },
-    { title: "Current Stock", value: "0", icon: "📦", link: "#" },
-    { title: "Customers", value: "0", icon: "🏥", link: "/customers" },
-    { title: "Suppliers", value: "0", icon: "🏭", link: "/companies" },
-    { title: "Sales", value: "Rs. 0", icon: "🧾", link: "#" },
-    { title: "Purchases", value: "Rs. 0", icon: "🛒", link: "/purchases" },
-    { title: "Receivables", value: "Rs. 0", icon: "💰", link: "#" },
-    { title: "Payables", value: "Rs. 0", icon: "💸", link: "#" },
+    {
+      title: "Products",
+      value: dataLoading ? "..." : formatNumber(dashboardData.products),
+      icon: "💊",
+      link: "/products",
+    },
+    {
+      title: "Current Stock",
+      value: dataLoading ? "..." : formatNumber(dashboardData.stock),
+      icon: "📦",
+      link: "/stock",
+    },
+    {
+      title: "Customers",
+      value: dataLoading ? "..." : formatNumber(dashboardData.customers),
+      icon: "🏥",
+      link: "/customers",
+    },
+    {
+      title: "Suppliers",
+      value: dataLoading ? "..." : formatNumber(dashboardData.suppliers),
+      icon: "🏭",
+      link: "/companies",
+    },
+    {
+      title: "Sales",
+      value: dataLoading ? "..." : formatCurrency(dashboardData.sales),
+      icon: "🧾",
+      link: "#",
+    },
+    {
+      title: "Purchases",
+      value: dataLoading ? "..." : formatCurrency(dashboardData.purchases),
+      icon: "🛒",
+      link: "/purchases",
+    },
+    {
+      title: "Receivables",
+      value: dataLoading
+        ? "..."
+        : formatCurrency(dashboardData.receivables),
+      icon: "💰",
+      link: "#",
+    },
+    {
+      title: "Payables",
+      value: dataLoading ? "..." : formatCurrency(dashboardData.payables),
+      icon: "💸",
+      link: "#",
+    },
   ];
 
   const sidebarItems = [
     { label: "💊 Products", link: "/products" },
-    { label: "📦 Stock", link: "#" },
+    { label: "📦 Stock", link: "/stock" },
     { label: "🏥 Customers", link: "/customers" },
     { label: "🏭 Suppliers", link: "/companies" },
     { label: "🧾 Sales", link: "#" },
