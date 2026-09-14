@@ -9,321 +9,247 @@ export default function PurchaseHistoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const loadPurchases = async () => {
-    setLoading(true);
-    setError("");
-
-    const { data, error } = await supabase
-      .from("purchases")
-      .select(`
-        id,
-        supplier_id,
-        invoice_no,
-        invoice_date,
-        total_amount,
-        paid_amount,
-        notes,
-        created_at,
-        companies (
-          id,
-          name
-        )
-      `)
-      .order("invoice_date", { ascending: false });
-
-    if (error) {
-      console.error(error);
-      setError(error.message);
-      setPurchases([]);
-    } else {
-      setPurchases(data || []);
-    }
-
-    setLoading(false);
-  };
-
   useEffect(() => {
     loadPurchases();
   }, []);
 
-  const formatAmount = (value) => {
-    return Number(value || 0).toLocaleString("en-PK", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-  };
+  async function loadPurchases() {
+    setLoading(true);
 
-  const getPayable = (purchase) => {
-    const total = Number(purchase.total_amount || 0);
-    const paid = Number(purchase.paid_amount || 0);
+    const result = await supabase
+      .from("purchases")
+      .select("*")
+      .order("invoice_date", { ascending: false });
 
-    return total - paid;
-  };
+    if (result.error) {
+      setError(result.error.message);
+      setPurchases([]);
+    } else {
+      setPurchases(result.data || []);
+    }
+
+    setLoading(false);
+  }
+
+  function money(value) {
+    return Number(value || 0).toLocaleString("en-PK");
+  }
 
   return (
-    <div style={styles.page}>
-      <div style={styles.container}>
-
-        <div style={styles.header}>
+    <main
+      style={{
+        minHeight: "100vh",
+        background: "#f5f7fb",
+        padding: "30px 20px",
+        fontFamily: "Arial, sans-serif",
+      }}
+    >
+      <div
+        style={{
+          maxWidth: "1200px",
+          margin: "0 auto",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "25px",
+            flexWrap: "wrap",
+            gap: "15px",
+          }}
+        >
           <div>
-            <h1 style={styles.title}>Purchase History</h1>
+            <h1
+              style={{
+                margin: 0,
+                color: "#111827",
+              }}
+            >
+              Purchase History
+            </h1>
 
-            <p style={styles.subtitle}>
-              View all purchase invoices and supplier payables.
+            <p style={{ color: "#6b7280" }}>
+              All purchase invoices
             </p>
           </div>
 
-          <a href="/purchases" style={styles.newButton}>
+          <a
+            href="/purchases"
+            style={{
+              background: "#2563eb",
+              color: "white",
+              padding: "11px 18px",
+              borderRadius: "8px",
+              textDecoration: "none",
+              fontWeight: "600",
+            }}
+          >
             + New Purchase
           </a>
         </div>
 
         {error && (
-          <div style={styles.errorBox}>
-            <strong>Error:</strong> {error}
+          <div
+            style={{
+              background: "#fee2e2",
+              color: "#991b1b",
+              padding: "15px",
+              borderRadius: "8px",
+              marginBottom: "20px",
+            }}
+          >
+            {error}
           </div>
         )}
 
-        <div style={styles.card}>
-
+        <div
+          style={{
+            background: "white",
+            borderRadius: "12px",
+            overflow: "hidden",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
+          }}
+        >
           {loading ? (
-            <div style={styles.message}>
-              Loading purchase history...
+            <div
+              style={{
+                padding: "50px",
+                textAlign: "center",
+              }}
+            >
+              Loading...
             </div>
           ) : purchases.length === 0 ? (
-            <div style={styles.message}>
-              <div style={styles.icon}>📦</div>
+            <div
+              style={{
+                padding: "60px 20px",
+                textAlign: "center",
+                color: "#6b7280",
+              }}
+            >
+              <h3>No Purchase Records</h3>
 
-              <h3 style={styles.emptyTitle}>
-                No Purchase Records
-              </h3>
-
-              <p style={styles.emptyText}>
-                Purchase invoices will appear here after they are recorded.
+              <p>
+                Purchase invoices will appear here after
+                they are recorded.
               </p>
             </div>
           ) : (
-            <div style={styles.tableWrapper}>
-              <table style={styles.table}>
-
+            <div style={{ overflowX: "auto" }}>
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  minWidth: "800px",
+                }}
+              >
                 <thead>
                   <tr>
-                    <th style={styles.th}>Date</th>
-                    <th style={styles.th}>Invoice No.</th>
-                    <th style={styles.th}>Supplier</th>
-                    <th style={styles.thRight}>Total</th>
-                    <th style={styles.thRight}>Paid</th>
-                    <th style={styles.thRight}>Payable</th>
-                    <th style={styles.th}>Notes</th>
+                    <th style={th}>Date</th>
+                    <th style={th}>Invoice No.</th>
+                    <th style={th}>Supplier ID</th>
+                    <th style={thRight}>Total</th>
+                    <th style={thRight}>Paid</th>
+                    <th style={thRight}>Payable</th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {purchases.map((purchase) => {
-                    const payable = getPayable(purchase);
+                    const total = Number(
+                      purchase.total_amount || 0
+                    );
+
+                    const paid = Number(
+                      purchase.paid_amount || 0
+                    );
+
+                    const payable = total - paid;
 
                     return (
                       <tr key={purchase.id}>
-
-                        <td style={styles.td}>
+                        <td style={td}>
                           {purchase.invoice_date || "-"}
                         </td>
 
-                        <td style={styles.td}>
-                          <strong>
-                            {purchase.invoice_no || "-"}
-                          </strong>
+                        <td style={td}>
+                          {purchase.invoice_no || "-"}
                         </td>
 
-                        <td style={styles.td}>
-                          {purchase.companies
-                            ? purchase.companies.name
-                            : "Unknown Supplier"}
+                        <td style={td}>
+                          {purchase.supplier_id || "-"}
                         </td>
 
-                        <td style={styles.tdRight}>
-                          Rs. {formatAmount(purchase.total_amount)}
+                        <td style={tdRight}>
+                          Rs. {money(total)}
                         </td>
 
                         <td
                           style={{
-                            ...styles.tdRight,
+                            ...tdRight,
                             color: "#15803d",
                           }}
                         >
-                          Rs. {formatAmount(purchase.paid_amount)}
+                          Rs. {money(paid)}
                         </td>
 
                         <td
                           style={{
-                            ...styles.tdRight,
+                            ...tdRight,
                             color:
                               payable > 0
                                 ? "#dc2626"
                                 : "#15803d",
-                            fontWeight: "700",
                           }}
                         >
-                          Rs. {formatAmount(payable)}
+                          Rs. {money(payable)}
                         </td>
-
-                        <td style={styles.td}>
-                          {purchase.notes || "-"}
-                        </td>
-
                       </tr>
                     );
                   })}
                 </tbody>
-
               </table>
             </div>
           )}
-
         </div>
 
-        <div style={styles.footer}>
-          Total Purchase Records:{" "}
-          <strong>{purchases.length}</strong>
-        </div>
-
+        <p
+          style={{
+            marginTop: "20px",
+            color: "#6b7280",
+          }}
+        >
+          Total Records: <strong>{purchases.length}</strong>
+        </p>
       </div>
-    </div>
+    </main>
   );
 }
 
-const styles = {
-  page: {
-    minHeight: "100vh",
-    background: "#f5f7fb",
-    padding: "30px 20px",
-    fontFamily: "Arial, sans-serif",
-  },
+const th = {
+  padding: "14px 16px",
+  background: "#f3f4f6",
+  borderBottom: "1px solid #e5e7eb",
+  textAlign: "left",
+  whiteSpace: "nowrap",
+};
 
-  container: {
-    maxWidth: "1250px",
-    margin: "0 auto",
-  },
+const thRight = {
+  ...th,
+  textAlign: "right",
+};
 
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: "15px",
-    flexWrap: "wrap",
-    marginBottom: "25px",
-  },
+const td = {
+  padding: "14px 16px",
+  borderBottom: "1px solid #e5e7eb",
+  whiteSpace: "nowrap",
+};
 
-  title: {
-    margin: 0,
-    fontSize: "28px",
-    color: "#111827",
-  },
-
-  subtitle: {
-    marginTop: "7px",
-    marginBottom: 0,
-    color: "#6b7280",
-    fontSize: "15px",
-  },
-
-  newButton: {
-    background: "#2563eb",
-    color: "#ffffff",
-    padding: "11px 18px",
-    borderRadius: "8px",
-    textDecoration: "none",
-    fontWeight: "600",
-    display: "inline-block",
-  },
-
-  errorBox: {
-    background: "#fee2e2",
-    color: "#991b1b",
-    padding: "14px",
-    borderRadius: "8px",
-    marginBottom: "20px",
-    border: "1px solid #fecaca",
-  },
-
-  card: {
-    background: "#ffffff",
-    borderRadius: "12px",
-    boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
-    overflow: "hidden",
-  },
-
-  message: {
-    padding: "55px 20px",
-    textAlign: "center",
-    color: "#6b7280",
-  },
-
-  icon: {
-    fontSize: "45px",
-    marginBottom: "10px",
-  },
-
-  emptyTitle: {
-    margin: "0 0 8px",
-    color: "#374151",
-  },
-
-  emptyText: {
-    margin: 0,
-  },
-
-  tableWrapper: {
-    overflowX: "auto",
-  },
-
-  table: {
-    width: "100%",
-    borderCollapse: "collapse",
-    minWidth: "900px",
-  },
-
-  th: {
-    padding: "14px 16px",
-    background: "#f3f4f6",
-    borderBottom: "1px solid #e5e7eb",
-    color: "#374151",
-    fontSize: "14px",
-    textAlign: "left",
-    whiteSpace: "nowrap",
-  },
-
-  thRight: {
-    padding: "14px 16px",
-    background: "#f3f4f6",
-    borderBottom: "1px solid #e5e7eb",
-    color: "#374151",
-    fontSize: "14px",
-    textAlign: "right",
-    whiteSpace: "nowrap",
-  },
-
-  td: {
-    padding: "14px 16px",
-    borderBottom: "1px solid #e5e7eb",
-    color: "#374151",
-    fontSize: "14px",
-  },
-
-  tdRight: {
-    padding: "14px 16px",
-    borderBottom: "1px solid #e5e7eb",
-    color: "#374151",
-    fontSize: "14px",
-    textAlign: "right",
-    fontWeight: "600",
-    whiteSpace: "nowrap",
-  },
-
-  footer: {
-    marginTop: "20px",
-    color: "#6b7280",
-    fontSize: "14px",
-  },
+const tdRight = {
+  ...td,
+  textAlign: "right",
+  fontWeight: "600",
 };
 ```
