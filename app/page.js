@@ -117,7 +117,7 @@ export default function Home() {
         payables: Math.max(totalPurchases - totalPaid, 0),
       });
     } catch (error) {
-      console.error("Dashboard data error:", error);
+      console.error("Dashboard data error:", error); alert("Dashboard data load nahi ho saka. Please try again.");
     } finally {
       setDataLoading(false);
     }
