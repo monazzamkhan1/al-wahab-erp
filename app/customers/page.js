@@ -14,6 +14,7 @@ const customerTypes = [
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState([]);
+  const [commissionHolders, setCommissionHolders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
@@ -29,12 +30,25 @@ export default function CustomersPage() {
     address: "",
     city: "",
     credit_limit: "",
+    commission_holder_id: "",
+    commission_percent: "",
+    commission_enabled_default: false,
     notes: "",
   });
 
   useEffect(() => {
     loadCustomers();
+    loadCommissionHolders();
   }, []);
+
+  async function loadCommissionHolders() {
+    const { data, error } = await supabase.from("commission_holders").select("id, name").eq("is_active", true).order("name");
+    if (error) {
+      if (error.code !== "42P01") setMessage(error.message);
+      return;
+    }
+    setCommissionHolders(data || []);
+  }
 
   async function loadCustomers() {
     setLoading(true);
@@ -70,6 +84,9 @@ export default function CustomersPage() {
       address: "",
       city: "",
       credit_limit: "",
+      commission_holder_id: "",
+      commission_percent: "",
+      commission_enabled_default: false,
       notes: "",
     });
 
@@ -90,6 +107,9 @@ export default function CustomersPage() {
       address: form.address || null,
       city: form.city || null,
       credit_limit: Number(form.credit_limit) || 0,
+      commission_holder_id: form.commission_holder_id || null,
+      commission_percent: Number(form.commission_percent) || 0,
+      commission_enabled_default: Boolean(form.commission_enabled_default),
       notes: form.notes || null,
     };
 
@@ -147,6 +167,9 @@ export default function CustomersPage() {
       address: customer.address || "",
       city: customer.city || "",
       credit_limit: customer.credit_limit || "",
+      commission_holder_id: customer.commission_holder_id || "",
+      commission_percent: customer.commission_percent || "",
+      commission_enabled_default: Boolean(customer.commission_enabled_default),
       notes: customer.notes || "",
     });
 
@@ -358,6 +381,24 @@ export default function CustomersPage() {
               />
             </div>
 
+            <div>
+              <label style={labelStyle}>Commission Holder</label>
+              <select name="commission_holder_id" value={form.commission_holder_id} onChange={handleChange} style={inputStyle}>
+                <option value="">No commission holder</option>
+                {commissionHolders.map((holder) => <option key={holder.id} value={holder.id}>{holder.name}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label style={labelStyle}>Commission % (on TP)</label>
+              <input name="commission_percent" value={form.commission_percent} onChange={handleChange} type="number" min="0" max="100" step="0.01" placeholder="Example: 10" style={inputStyle} />
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", paddingTop: "27px" }}>
+              <input id="commission_enabled_default" type="checkbox" checked={form.commission_enabled_default} onChange={(e) => setForm({ ...form, commission_enabled_default: e.target.checked })} />
+              <label htmlFor="commission_enabled_default" style={labelStyle}>Apply commission by default</label>
+            </div>
+
             <div style={{ gridColumn: "1 / -1" }}>
               <label style={labelStyle}>Address</label>
 
@@ -497,6 +538,7 @@ export default function CustomersPage() {
                   <th style={thStyle}>Phone</th>
                   <th style={thStyle}>City</th>
                   <th style={thStyle}>Credit Limit</th>
+                  <th style={thStyle}>Commission</th>
                   <th style={thStyle}>Actions</th>
                 </tr>
               </thead>
@@ -507,6 +549,8 @@ export default function CustomersPage() {
                     <td style={tdStyle}>
                       <strong>{customer.name}</strong>
                     </td>
+
+                    <td style={tdStyle}>{customer.commission_enabled_default ? `${Number(customer.commission_percent || 0).toFixed(2)}% on TP` : "Not default"}</td>
 
                     <td style={tdStyle}>
                       {displayType(customer.customer_type)}
