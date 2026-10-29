@@ -185,8 +185,7 @@ export default function Home() {
     {
       title: "Sales",
       value: dataLoading ? "..." : formatCurrency(dashboardData.sales),
-      icon: "🧾",
-      link: "#",
+      icon: "🧾", link: "/sales",
     },
     {
       title: "Purchases",
@@ -215,7 +214,7 @@ export default function Home() {
     { label: "📦 Stock", link: "/stock" },
     { label: "🏥 Customers", link: "/customers" },
     { label: "🏭 Suppliers", link: "/companies" },
-    { label: "🧾 Sales", link: "#" },
+    { label: "🧾 Sales", link: "/sales" },
     { label: "🛒 Purchases", link: "/purchases" },
     { label: "💰 Accounts", link: "#" },
     { label: "📈 Reports", link: "#" },
@@ -227,7 +226,7 @@ export default function Home() {
     { label: "Add Product", link: "/products" },
     { label: "Add Customer", link: "/customers" },
     { label: "Add Supplier", link: "/companies" },
-    { label: "New Sale", link: "#" },
+    { label: "New Sale", link: "/sales" },
     { label: "New Purchase", link: "/purchases" },
   ];
 
