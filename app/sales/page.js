@@ -8,6 +8,7 @@ export default function SalesPage() {
   const [products, setProducts] = useState([]);
   const [batches, setBatches] = useState([]);
   const [customerId, setCustomerId] = useState("");
+  const [applyCommission, setApplyCommission] = useState(false);
   const [invoiceNo, setInvoiceNo] = useState("");
   const [saleDate, setSaleDate] = useState(
     new Date().toISOString().slice(0, 10)
@@ -32,10 +33,10 @@ export default function SalesPage() {
   async function loadInitialData() {
     setLoading(true);
     const [customerResult, productResult] = await Promise.all([
-      supabase.from("customers").select("id, name").order("name"),
+      supabase.from("customers").select("id, name, commission_holder_id, commission_percent, commission_enabled_default, commission_holders(name)").order("name"),
       supabase
         .from("products")
-        .select("id, product_code, product_name, pack_size")
+        .select("id, product_code, product_name, pack_size, mrp, tp_discount_percent, is_milk_formula")
         .eq("is_active", true)
         .order("product_name"),
     ]);
@@ -73,10 +74,20 @@ export default function SalesPage() {
     setBatches(data || []);
   }
 
-  function selectBatch(value) {
+  function selectCustomer(value) {
+    setCustomerId(value);
+    const customer = customers.find((item) => item.id === value);
+    setApplyCommission(Boolean(customer?.commission_enabled_default && customer?.commission_holder_id && Number(customer?.commission_percent) > 0));
+  }
+
+  async function selectBatch(value) {
     setBatchId(value);
     const batch = batches.find((item) => item.id === value);
     setSaleRate(batch?.sale_rate ?? "");
+    if (customerId && productId) {
+      const { data } = await supabase.from("customer_product_prices").select("sale_rate").eq("customer_id", customerId).eq("product_id", productId).maybeSingle();
+      if (data?.sale_rate !== undefined && data?.sale_rate !== null) setSaleRate(data.sale_rate);
+    }
   }
 
   const lineAmount = useMemo(() => {
@@ -115,6 +126,9 @@ export default function SalesPage() {
         discount: Number(discount || 0),
         tax: Number(tax || 0),
         amount: lineAmount,
+        mrp: Number(product?.mrp || 0),
+        tp_discount_percent: Number(product?.tp_discount_percent ?? 15),
+        tp_rate: Number(product?.mrp || 0) * (1 - Number(product?.tp_discount_percent ?? 15) / 100),
       },
     ]);
     setProductId("");
@@ -130,6 +144,9 @@ export default function SalesPage() {
   const total = items.reduce((sum, item) => sum + item.amount, 0);
   const received = Number(receivedAmount || 0);
   const receivable = Math.max(total - received, 0);
+  const selectedCustomer = customers.find((item) => item.id === customerId);
+  const commissionPercent = applyCommission ? Number(selectedCustomer?.commission_percent || 0) : 0;
+  const commissionTotal = items.reduce((sum, item) => sum + item.tp_rate * item.quantity * commissionPercent / 100, 0);
 
   async function saveSale() {
     setMessage("");
@@ -154,6 +171,7 @@ export default function SalesPage() {
         p_received_amount: received,
         p_notes: notes || null,
         p_created_by: authData.user.id,
+        p_apply_commission: applyCommission,
         p_items: items.map(({ product_id, batch_id, quantity, sale_rate, discount, tax, amount }) => ({
           product_id,
           batch_id,
@@ -168,6 +186,7 @@ export default function SalesPage() {
 
       setMessage("Sale saved, stock updated. Sale ID: " + saleId);
       setCustomerId("");
+      setApplyCommission(false);
       setInvoiceNo("");
       setSaleDate(new Date().toISOString().slice(0, 10));
       setReceivedAmount("");
@@ -198,10 +217,14 @@ export default function SalesPage() {
           <h2 style={styles.sectionTitle}>Sale Invoice</h2>
           <div style={styles.grid}>
             <label style={styles.label}>Customer *
-              <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} style={styles.input} disabled={loading}>
+              <select value={customerId} onChange={(e) => selectCustomer(e.target.value)} style={styles.input} disabled={loading}>
                 <option value="">Select Customer</option>
                 {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}
               </select>
+            </label>
+            <label style={{ ...styles.label, display: "flex", alignItems: "center", gap: "8px", paddingTop: "28px" }}>
+              <input type="checkbox" checked={applyCommission} disabled={!selectedCustomer?.commission_holder_id || !Number(selectedCustomer?.commission_percent)} onChange={(e) => setApplyCommission(e.target.checked)} />
+              Apply commission{selectedCustomer?.commission_holders?.name ? ` for ${selectedCustomer.commission_holders.name} (${Number(selectedCustomer.commission_percent || 0)}% on TP)` : " (set it in Customer first)"}
             </label>
             <label style={styles.label}>Invoice No. *
               <input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} style={styles.input} placeholder="Sale invoice number" />
@@ -263,6 +286,7 @@ export default function SalesPage() {
           <div style={styles.totalRow}><span>Grand Total</span><strong>Rs. {total.toLocaleString()}</strong></div>
           <div style={styles.totalRow}><span>Received Amount</span><strong>Rs. {received.toLocaleString()}</strong></div>
           <div style={styles.balanceRow}><span>Customer Receivable</span><strong>Rs. {receivable.toLocaleString()}</strong></div>
+          {applyCommission && <div style={styles.commissionRow}><span>Commission (TP basis)</span><strong>Rs. {commissionTotal.toLocaleString()}</strong></div>}
           <button type="button" onClick={saveSale} disabled={saving || loading} style={styles.saveButton}>{saving ? "Saving Sale..." : "Save Sale & Update Stock"}</button>
         </section>
       </div>
@@ -287,6 +311,7 @@ const styles = {
   th: { textAlign: "left", padding: "11px", background: "#f8fafc", borderBottom: "1px solid #e4e7ec", fontSize: "12px" }, td: { padding: "11px", borderBottom: "1px solid #eaecf0", fontSize: "13px" },
   remove: { border: "none", background: "#dc2626", color: "#fff", padding: "7px 10px", borderRadius: "6px", cursor: "pointer", fontSize: "12px" },
   totalCard: { background: "#fff", border: "1px solid #e4e7ec", borderRadius: "14px", padding: "22px", marginBottom: "30px" }, totalRow: { display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #eaecf0" }, balanceRow: { display: "flex", justifyContent: "space-between", padding: "15px 0", fontSize: "19px" },
+  commissionRow: { display: "flex", justifyContent: "space-between", padding: "10px 0", color: "#7c3aed", borderTop: "1px solid #eaecf0" },
   saveButton: { width: "100%", border: "none", background: "#16a34a", color: "#fff", padding: "14px", borderRadius: "9px", cursor: "pointer", fontWeight: "700", fontSize: "16px", marginTop: "18px" },
   message: { background: "#fef3c7", border: "1px solid #fcd34d", color: "#92400e", padding: "12px 15px", borderRadius: "8px", marginBottom: "18px" },
 };
