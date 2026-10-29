@@ -55,6 +55,9 @@ export default function ProductsPage() {
     pack_size: "",
     category: "",
     company_id: "",
+    mrp: "",
+    tp_discount_percent: "15",
+    is_milk_formula: false,
     purchase_rate: "",
     sale_rate: "",
     min_stock: "",
@@ -124,6 +127,9 @@ export default function ProductsPage() {
       pack_size: "",
       category: "",
       company_id: "",
+      mrp: "",
+      tp_discount_percent: "15",
+      is_milk_formula: false,
       purchase_rate: "",
       sale_rate: "",
       min_stock: "",
@@ -164,6 +170,9 @@ export default function ProductsPage() {
       pack_size: form.pack_size || null,
       category: form.category || null,
       company_id: form.company_id || null,
+      mrp: Number(form.mrp) || 0,
+      tp_discount_percent: Number(form.tp_discount_percent) || 0,
+      is_milk_formula: Boolean(form.is_milk_formula),
       purchase_rate: Number(form.purchase_rate) || 0,
       sale_rate: Number(form.sale_rate) || 0,
       min_stock: Number(form.min_stock) || 0,
@@ -210,6 +219,9 @@ export default function ProductsPage() {
       pack_size: product.pack_size || "",
       category: product.category || "",
       company_id: product.company_id || "",
+      mrp: product.mrp || "",
+      tp_discount_percent: product.tp_discount_percent ?? "15",
+      is_milk_formula: Boolean(product.is_milk_formula),
       purchase_rate: product.purchase_rate || "",
       sale_rate: product.sale_rate || "",
       min_stock: product.min_stock || "",
@@ -481,6 +493,22 @@ export default function ProductsPage() {
             </div>
 
             <div>
+              <label style={labelStyle}>MRP</label>
+              <input name="mrp" value={form.mrp} onChange={handleChange} type="number" step="0.01" min="0" placeholder="0.00" style={inputStyle} />
+            </div>
+
+            <div>
+              <label style={labelStyle}>TP Discount %</label>
+              <input name="tp_discount_percent" value={form.tp_discount_percent} onChange={handleChange} type="number" step="0.01" min="0" max="100" placeholder="15" style={inputStyle} />
+              <small style={{ color: "#6b7280" }}>Normal 15%; milk formula 5.6%.</small>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", paddingTop: "25px" }}>
+              <input id="is_milk_formula" name="is_milk_formula" checked={form.is_milk_formula} onChange={(e) => setForm({ ...form, is_milk_formula: e.target.checked, tp_discount_percent: e.target.checked ? "5.6" : form.tp_discount_percent || "15" })} type="checkbox" />
+              <label htmlFor="is_milk_formula" style={labelStyle}>Milk Formula</label>
+            </div>
+
+            <div>
               <label style={labelStyle}>
                 Purchase Rate
               </label>
@@ -649,6 +677,8 @@ export default function ProductsPage() {
                   <th style={thStyle}>Form</th>
                   <th style={thStyle}>Pack</th>
                   <th style={thStyle}>Purchase</th>
+                  <th style={thStyle}>MRP</th>
+                  <th style={thStyle}>TP Rule</th>
                   <th style={thStyle}>Sale</th>
                   <th style={thStyle}>Actions</th>
                 </tr>
@@ -689,6 +719,9 @@ export default function ProductsPage() {
                         product.purchase_rate || 0
                       ).toFixed(2)}
                     </td>
+
+                    <td style={tdStyle}>Rs. {Number(product.mrp || 0).toFixed(2)}</td>
+                    <td style={tdStyle}>{Number(product.tp_discount_percent ?? 15).toFixed(2)}% off{product.is_milk_formula ? " (Milk)" : ""}</td>
 
                     <td style={tdStyle}>
                       Rs.{" "}
