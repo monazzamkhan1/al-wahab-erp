@@ -8,21 +8,16 @@ export default function Home() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const [dashboardData, setDashboardData] = useState({
-    products: 0,
-    stock: 0,
-    customers: 0,
-    suppliers: 0,
-    sales: 0,
-    purchases: 0,
-    receivables: 0,
-    payables: 0,
-  });
-
-  const [dataLoading, setDataLoading] = useState(true);
+  const [dashboardData, setDashboardData] = useState(null);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [dataError, setDataError] = useState("");
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (error) {
+        console.error("Session error:", error);
+      }
+
       setSession(data.session);
       setLoading(false);
     });
@@ -31,6 +26,7 @@ export default function Home() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
@@ -38,86 +34,30 @@ export default function Home() {
 
   async function loadDashboardData() {
     setDataLoading(true);
+    setDataError("");
 
     try {
-      const [
-        productsResult,
-        stockResult,
-        customersResult,
-        suppliersResult,
-        salesResult,
-        purchasesResult,
-      ] = await Promise.all([
-        supabase
-          .from("products")
-          .select("id", { count: "exact", head: true }),
+      const { data, error } = await supabase
+        .rpc("get_dashboard_metrics")
+        .single();
 
-        supabase
-          .from("product_batches")
-          .select("quantity"),
-
-        supabase
-          .from("customers")
-          .select("id", { count: "exact", head: true }),
-
-        supabase
-          .from("companies")
-          .select("id", { count: "exact", head: true })
-          .in("company_type", ["supplier", "both"]),
-
-        supabase
-          .from("sales")
-          .select("total_amount, received_amount"),
-
-        supabase
-          .from("purchases")
-          .select("total_amount, paid_amount"),
-      ]);
-
-      if (productsResult.error) throw productsResult.error;
-      if (stockResult.error) throw stockResult.error;
-      if (customersResult.error) throw customersResult.error;
-      if (suppliersResult.error) throw suppliersResult.error;
-      if (salesResult.error) throw salesResult.error;
-      if (purchasesResult.error) throw purchasesResult.error;
-
-      const totalStock = (stockResult.data || []).reduce(
-        (sum, item) => sum + Number(item.quantity || 0),
-        0
-      );
-
-      const totalSales = (salesResult.data || []).reduce(
-        (sum, item) => sum + Number(item.total_amount || 0),
-        0
-      );
-
-      const totalReceived = (salesResult.data || []).reduce(
-        (sum, item) => sum + Number(item.received_amount || 0),
-        0
-      );
-
-      const totalPurchases = (purchasesResult.data || []).reduce(
-        (sum, item) => sum + Number(item.total_amount || 0),
-        0
-      );
-
-      const totalPaid = (purchasesResult.data || []).reduce(
-        (sum, item) => sum + Number(item.paid_amount || 0),
-        0
-      );
+      if (error) throw error;
 
       setDashboardData({
-        products: productsResult.count || 0,
-        stock: totalStock,
-        customers: customersResult.count || 0,
-        suppliers: suppliersResult.count || 0,
-        sales: totalSales,
-        purchases: totalPurchases,
-        receivables: Math.max(totalSales - totalReceived, 0),
-        payables: Math.max(totalPurchases - totalPaid, 0),
+        products: Number(data?.products || 0),
+        stock: Number(data?.stock || 0),
+        customers: Number(data?.customers || 0),
+        suppliers: Number(data?.suppliers || 0),
+        sales: Number(data?.sales || 0),
+        purchases: Number(data?.purchases || 0),
+        receivables: Number(data?.receivables || 0),
+        payables: Number(data?.payables || 0),
       });
     } catch (error) {
-      console.error("Dashboard data error:", error); alert("Dashboard data load nahi ho saka. Please try again.");
+      console.error("Dashboard data error:", error);
+      setDataError(
+        "Dashboard data load nahi ho saka. Please try again."
+      );
     } finally {
       setDataLoading(false);
     }
@@ -126,6 +66,9 @@ export default function Home() {
   useEffect(() => {
     if (session) {
       loadDashboardData();
+    } else {
+      setDashboardData(null);
+      setDataError("");
     }
   }, [session]);
 
@@ -160,36 +103,45 @@ export default function Home() {
   const cards = [
     {
       title: "Products",
-      value: dataLoading ? "..." : formatNumber(dashboardData.products),
+      value: dataLoading
+        ? "..."
+        : formatNumber(dashboardData?.products),
       icon: "💊",
       link: "/products",
     },
     {
       title: "Current Stock",
-      value: dataLoading ? "..." : formatNumber(dashboardData.stock),
+      value: dataLoading ? "..." : formatNumber(dashboardData?.stock),
       icon: "📦",
       link: "/stock",
     },
     {
       title: "Customers",
-      value: dataLoading ? "..." : formatNumber(dashboardData.customers),
+      value: dataLoading
+        ? "..."
+        : formatNumber(dashboardData?.customers),
       icon: "🏥",
       link: "/customers",
     },
     {
       title: "Suppliers",
-      value: dataLoading ? "..." : formatNumber(dashboardData.suppliers),
+      value: dataLoading
+        ? "..."
+        : formatNumber(dashboardData?.suppliers),
       icon: "🏭",
       link: "/companies",
     },
     {
       title: "Sales",
-      value: dataLoading ? "..." : formatCurrency(dashboardData.sales),
-      icon: "🧾", link: "/sales",
+      value: dataLoading ? "..." : formatCurrency(dashboardData?.sales),
+      icon: "🧾",
+      link: "/sales",
     },
     {
       title: "Purchases",
-      value: dataLoading ? "..." : formatCurrency(dashboardData.purchases),
+      value: dataLoading
+        ? "..."
+        : formatCurrency(dashboardData?.purchases),
       icon: "🛒",
       link: "/purchases",
     },
@@ -197,13 +149,15 @@ export default function Home() {
       title: "Receivables",
       value: dataLoading
         ? "..."
-        : formatCurrency(dashboardData.receivables),
+        : formatCurrency(dashboardData?.receivables),
       icon: "💰",
       link: "#",
     },
     {
       title: "Payables",
-      value: dataLoading ? "..." : formatCurrency(dashboardData.payables),
+      value: dataLoading
+        ? "..."
+        : formatCurrency(dashboardData?.payables),
       icon: "💸",
       link: "#",
     },
@@ -215,6 +169,7 @@ export default function Home() {
     { label: "🏥 Customers", link: "/customers" },
     { label: "🏭 Suppliers", link: "/companies" },
     { label: "🧾 Sales", link: "/sales" },
+    { label: "📒 Commission Ledger", link: "/commission-ledger" },
     { label: "🛒 Purchases", link: "/purchases" },
     { label: "💰 Accounts", link: "#" },
     { label: "📈 Reports", link: "#" },
@@ -227,6 +182,7 @@ export default function Home() {
     { label: "Add Customer", link: "/customers" },
     { label: "Add Supplier", link: "/companies" },
     { label: "New Sale", link: "/sales" },
+    { label: "Commission Ledger", link: "/commission-ledger" },
     { label: "New Purchase", link: "/purchases" },
   ];
 
@@ -360,6 +316,40 @@ export default function Home() {
               Welcome to Al Wahab Enterprises ERP.
             </p>
           </div>
+
+          {dataError && (
+            <div
+              style={{
+                marginBottom: "20px",
+                padding: "12px 15px",
+                background: "#fee2e2",
+                color: "#991b1b",
+                borderRadius: "8px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "12px",
+              }}
+            >
+              <span>{dataError}</span>
+              <button
+                type="button"
+                onClick={loadDashboardData}
+                disabled={dataLoading}
+                style={{
+                  padding: "8px 12px",
+                  background: "#991b1b",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: dataLoading ? "wait" : "pointer",
+                  fontWeight: "bold",
+                }}
+              >
+                Retry
+              </button>
+            </div>
+          )}
 
           <div
             style={{
