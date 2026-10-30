@@ -364,9 +364,7 @@ export default function PurchasesPage() {
             </p>
           </div>
 
-          <a href="/" style={styles.backButton}>
-            ← Dashboard
-          </a>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}><a href="/purchases/invoices" style={styles.backButton}>Purchase Invoices</a><a href="/" style={styles.backButton}>← Dashboard</a></div>
         </div>
 
         {message && <div style={styles.message}>{message}</div>}
