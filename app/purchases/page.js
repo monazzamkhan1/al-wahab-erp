@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabase";
 
 export default function PurchasesPage() {
@@ -19,6 +19,8 @@ export default function PurchasesPage() {
   const [items, setItems] = useState([]);
 
   const [productId, setProductId] = useState("");
+  const [productSearch, setProductSearch] = useState("");
+  const [showProductMatches, setShowProductMatches] = useState(false);
   const [batchId, setBatchId] = useState("");
   const [batchNo, setBatchNo] = useState("");
   const [manufacturingDate, setManufacturingDate] = useState("");
@@ -98,6 +100,55 @@ export default function PurchasesPage() {
     setPurchaseRate("");
     loadBatches(value);
   }
+
+  function productLabel(product) {
+    return `${product.product_name}${product.pack_size ? ` (${product.pack_size})` : ""}${
+      product.product_code ? ` — ${product.product_code}` : ""
+    }`;
+  }
+
+  function clearProductSelection() {
+    setProductId("");
+    setBatchId("");
+    setBatchNo("");
+    setManufacturingDate("");
+    setExpiryDate("");
+    setPurchaseRate("");
+    setBatches([]);
+  }
+
+  function handleProductSearchChange(value) {
+    setProductSearch(value);
+    setShowProductMatches(true);
+
+    if (!productId || value !== productLabel(products.find((p) => p.id === productId) || {})) {
+      clearProductSelection();
+    }
+  }
+
+  function selectProduct(product) {
+    setProductSearch(productLabel(product));
+    setShowProductMatches(false);
+    handleProductChange(product.id);
+  }
+
+  const matchingProducts = useMemo(() => {
+    const search = productSearch.trim().toLowerCase();
+
+    if (!search) {
+      return products.slice(0, 20);
+    }
+
+    return products
+      .filter((product) =>
+        [product.product_name, product.product_code, product.pack_size]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(search)
+      )
+      .slice(0, 20);
+  }, [products, productSearch]);
 
   function handleBatchChange(value) {
     setBatchId(value);
@@ -180,6 +231,8 @@ export default function PurchasesPage() {
     setItems((prev) => [...prev, newItem]);
 
     setProductId("");
+    setProductSearch("");
+    setShowProductMatches(false);
     setBatchId("");
     setBatchNo("");
     setManufacturingDate("");
@@ -378,23 +431,42 @@ export default function PurchasesPage() {
           <div style={styles.formGrid}>
             <label style={styles.label}>
               Product *
-              <select
-                value={productId}
-                onChange={(e) => handleProductChange(e.target.value)}
-                style={styles.input}
-              >
-                <option value="">Select Product</option>
+              <div style={styles.productPicker}>
+                <input
+                  type="search"
+                  value={productSearch}
+                  onChange={(e) => handleProductSearchChange(e.target.value)}
+                  onFocus={() => setShowProductMatches(true)}
+                  onBlur={() => setShowProductMatches(false)}
+                  placeholder="Type product name, pack or code"
+                  style={styles.input}
+                  autoComplete="off"
+                />
 
-                {products.map((product) => (
-                  <option key={product.id} value={product.id}>
-                    {product.product_code
-                      ? `${product.product_code} - `
-                      : ""}
-                    {product.product_name}
-                    {product.pack_size ? ` (${product.pack_size})` : ""}
-                  </option>
-                ))}
-              </select>
+                {showProductMatches && (
+                  <div style={styles.productMenu}>
+                    {matchingProducts.length > 0 ? (
+                      matchingProducts.map((product) => (
+                        <button
+                          key={product.id}
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => selectProduct(product)}
+                          style={styles.productOption}
+                        >
+                          <strong>{product.product_name}</strong>
+                          <small>
+                            {product.pack_size ? `${product.pack_size} · ` : ""}
+                            {product.product_code || "No code"}
+                          </small>
+                        </button>
+                      ))
+                    ) : (
+                      <div style={styles.noProductMatch}>No matching product found.</div>
+                    )}
+                  </div>
+                )}
+              </div>
             </label>
 
             <label style={styles.label}>
@@ -694,6 +766,44 @@ const styles = {
     borderRadius: "8px",
     background: "#fff",
     fontSize: "14px",
+  },
+
+  productPicker: {
+    position: "relative",
+    marginTop: "7px",
+  },
+
+  productMenu: {
+    position: "absolute",
+    zIndex: 20,
+    width: "100%",
+    maxHeight: "270px",
+    overflowY: "auto",
+    background: "#fff",
+    border: "1px solid #d0d5dd",
+    borderRadius: "8px",
+    boxShadow: "0 10px 20px rgba(16,24,40,0.12)",
+  },
+
+  productOption: {
+    width: "100%",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: "3px",
+    border: "none",
+    borderBottom: "1px solid #eaecf0",
+    background: "#fff",
+    padding: "10px 12px",
+    textAlign: "left",
+    cursor: "pointer",
+    color: "#172033",
+  },
+
+  noProductMatch: {
+    padding: "12px",
+    color: "#667085",
+    fontWeight: "400",
   },
 
   textarea: {
