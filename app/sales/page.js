@@ -18,9 +18,12 @@ export default function SalesPage() {
   const [productId, setProductId] = useState("");
   const [batchId, setBatchId] = useState("");
   const [quantity, setQuantity] = useState("");
+  const [bonusQuantity, setBonusQuantity] = useState("");
   const [saleRate, setSaleRate] = useState("");
   const [discount, setDiscount] = useState("");
   const [tax, setTax] = useState("");
+  const [bookerName, setBookerName] = useState("");
+  const [supplierName, setSupplierName] = useState("");
   const [items, setItems] = useState([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -83,7 +86,9 @@ export default function SalesPage() {
   async function selectBatch(value) {
     setBatchId(value);
     const batch = batches.find((item) => item.id === value);
-    setSaleRate(batch?.sale_rate ?? "");
+    const product = products.find((item) => item.id === productId);
+    const tpRate = Number(product?.mrp || 0) * (1 - Number(product?.tp_discount_percent ?? 15) / 100);
+    setSaleRate(batch?.sale_rate ?? tpRate);
     if (customerId && productId) {
       const { data } = await supabase.from("customer_product_prices").select("sale_rate").eq("customer_id", customerId).eq("product_id", productId).maybeSingle();
       if (data?.sale_rate !== undefined && data?.sale_rate !== null) setSaleRate(data.sale_rate);
@@ -102,7 +107,7 @@ export default function SalesPage() {
       setMessage("Product aur available batch select karein.");
       return;
     }
-    if (!quantity || Number(quantity) <= 0 || Number(quantity) > Number(batch.quantity)) {
+    if (!quantity || Number(quantity) <= 0 || Number(quantity) + Number(bonusQuantity || 0) > Number(batch.quantity)) {
       setMessage("Available stock ke andar valid quantity enter karein.");
       return;
     }
@@ -122,6 +127,7 @@ export default function SalesPage() {
         batch_no: batch.batch_no,
         available: Number(batch.quantity),
         quantity: Number(quantity),
+        bonus_quantity: Number(bonusQuantity || 0),
         sale_rate: Number(saleRate),
         discount: Number(discount || 0),
         tax: Number(tax || 0),
@@ -134,6 +140,7 @@ export default function SalesPage() {
     setProductId("");
     setBatchId("");
     setQuantity("");
+    setBonusQuantity("");
     setSaleRate("");
     setDiscount("");
     setTax("");
@@ -166,16 +173,19 @@ export default function SalesPage() {
       const { data: saleId, error } = await supabase.rpc("save_sale_with_stock", {
         p_customer_id: customerId,
         p_invoice_no: invoiceNo.trim(),
-        p_invoice_date: saleDate,
+        p_sale_date: saleDate,
         p_total_amount: total,
         p_received_amount: received,
         p_notes: notes || null,
         p_created_by: authData.user.id,
         p_apply_commission: applyCommission,
-        p_items: items.map(({ product_id, batch_id, quantity, sale_rate, discount, tax, amount }) => ({
+        p_booker_name: bookerName || "",
+        p_supplier_name: supplierName || "",
+        p_items: items.map(({ product_id, batch_id, quantity, bonus_quantity, sale_rate, discount, tax, amount }) => ({
           product_id,
           batch_id,
           quantity,
+          bonus_quantity,
           sale_rate,
           discount,
           tax,
@@ -191,6 +201,8 @@ export default function SalesPage() {
       setSaleDate(new Date().toISOString().slice(0, 10));
       setReceivedAmount("");
       setNotes("");
+      setBookerName("");
+      setSupplierName("");
       setItems([]);
     } catch (error) {
       console.error(error);
@@ -235,6 +247,12 @@ export default function SalesPage() {
             <label style={styles.label}>Received Amount
               <input type="number" value={receivedAmount} onChange={(e) => setReceivedAmount(e.target.value)} style={styles.input} placeholder="0" min="0" />
             </label>
+            <label style={styles.label}>Booker Name (Optional)
+              <input value={bookerName} onChange={(e) => setBookerName(e.target.value)} style={styles.input} placeholder="Booker / sales person" />
+            </label>
+            <label style={styles.label}>Supplier Name (Optional)
+              <input value={supplierName} onChange={(e) => setSupplierName(e.target.value)} style={styles.input} placeholder="Supplier / distributor" />
+            </label>
           </div>
           <label style={styles.label}>Notes
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} style={styles.textarea} rows={3} placeholder="Optional sale notes" />
@@ -259,6 +277,9 @@ export default function SalesPage() {
             <label style={styles.label}>Quantity *
               <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} style={styles.input} min="1" />
             </label>
+            <label style={styles.label}>Bonus
+              <input type="number" value={bonusQuantity} onChange={(e) => setBonusQuantity(e.target.value)} style={styles.input} min="0" placeholder="0" />
+            </label>
             <label style={styles.label}>Sale Rate *
               <input type="number" value={saleRate} onChange={(e) => setSaleRate(e.target.value)} style={styles.input} min="0" />
             </label>
@@ -276,8 +297,8 @@ export default function SalesPage() {
         <section style={styles.card}>
           <h2 style={styles.sectionTitle}>Sale Items</h2>
           {items.length === 0 ? <div style={styles.empty}>Abhi koi item add nahi kiya gaya.</div> : (
-            <div style={styles.tableWrap}><table style={styles.table}><thead><tr><th style={styles.th}>Product</th><th style={styles.th}>Batch</th><th style={styles.th}>Qty</th><th style={styles.th}>Rate</th><th style={styles.th}>Amount</th><th style={styles.th}></th></tr></thead><tbody>
-              {items.map((item) => <tr key={item.tempId}><td style={styles.td}>{item.product_name}</td><td style={styles.td}>{item.batch_no}</td><td style={styles.td}>{item.quantity}</td><td style={styles.td}>Rs. {item.sale_rate.toLocaleString()}</td><td style={styles.td}>Rs. {item.amount.toLocaleString()}</td><td style={styles.td}><button type="button" onClick={() => setItems((current) => current.filter((row) => row.tempId !== item.tempId))} style={styles.remove}>Remove</button></td></tr>)}
+            <div style={styles.tableWrap}><table style={styles.table}><thead><tr><th style={styles.th}>Product</th><th style={styles.th}>Batch</th><th style={styles.th}>Qty</th><th style={styles.th}>Bonus</th><th style={styles.th}>Rate</th><th style={styles.th}>Amount</th><th style={styles.th}></th></tr></thead><tbody>
+              {items.map((item) => <tr key={item.tempId}><td style={styles.td}>{item.product_name}</td><td style={styles.td}>{item.batch_no}</td><td style={styles.td}>{item.quantity}</td><td style={styles.td}>{item.bonus_quantity || "-"}</td><td style={styles.td}>Rs. {item.sale_rate.toLocaleString()}</td><td style={styles.td}>Rs. {item.amount.toLocaleString()}</td><td style={styles.td}><button type="button" onClick={() => setItems((current) => current.filter((row) => row.tempId !== item.tempId))} style={styles.remove}>Remove</button></td></tr>)}
             </tbody></table></div>
           )}
         </section>
