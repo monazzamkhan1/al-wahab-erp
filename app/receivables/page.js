@@ -15,8 +15,8 @@ export default function ReceivablesPage() {
     setError("");
     const { data, error: loadError } = await supabase
       .from("sales")
-      .select("id, invoice_no, sale_date, total_amount, received_amount, customers(name)")
-      .order("sale_date", { ascending: false });
+      .select("id, invoice_no, invoice_date, total_amount, received_amount, customers(name)")
+      .order("invoice_date", { ascending: false });
 
     if (loadError) setError(`Receivables load nahi ho sake: ${loadError.message}`);
     else setRows((data || []).filter((sale) => Number(sale.total_amount || 0) > Number(sale.received_amount || 0)));
@@ -29,7 +29,7 @@ export default function ReceivablesPage() {
   return <main style={styles.page}><a href="/" style={styles.back}>← Dashboard</a><h1 style={styles.title}>Receivables</h1><p style={styles.sub}>Customers se receive hone wali outstanding amount.</p>
     <section style={styles.card}><div style={styles.totalLabel}>Total Receivable</div><strong style={styles.total}>{money(total)}</strong></section>
     {error && <div style={styles.error}>{error}<button onClick={loadReceivables} style={styles.retry}>Retry</button></div>}
-    <section style={styles.card}><h2 style={styles.heading}>Outstanding Sales Invoices</h2>{loading ? <p>Loading...</p> : rows.length === 0 ? <p style={styles.muted}>Koi outstanding sale invoice nahi hai.</p> : <div style={styles.tableWrap}><table style={styles.table}><thead><tr><th style={styles.th}>Date</th><th style={styles.th}>Invoice</th><th style={styles.th}>Customer</th><th style={styles.th}>Sale</th><th style={styles.th}>Received</th><th style={styles.th}>Balance</th></tr></thead><tbody>{rows.map((row) => { const balance = Number(row.total_amount || 0) - Number(row.received_amount || 0); return <tr key={row.id}><td style={styles.td}>{row.sale_date}</td><td style={styles.td}>{row.invoice_no}</td><td style={styles.td}>{row.customers?.name || "—"}</td><td style={styles.td}>{money(row.total_amount)}</td><td style={styles.td}>{money(row.received_amount)}</td><td style={{...styles.td, fontWeight: 700, color: "#b45309"}}>{money(balance)}</td></tr>; })}</tbody></table></div>}</section>
+    <section style={styles.card}><h2 style={styles.heading}>Outstanding Sales Invoices</h2>{loading ? <p>Loading...</p> : rows.length === 0 ? <p style={styles.muted}>Koi outstanding sale invoice nahi hai.</p> : <div style={styles.tableWrap}><table style={styles.table}><thead><tr><th style={styles.th}>Date</th><th style={styles.th}>Invoice</th><th style={styles.th}>Customer</th><th style={styles.th}>Sale</th><th style={styles.th}>Received</th><th style={styles.th}>Balance</th></tr></thead><tbody>{rows.map((row) => { const balance = Number(row.total_amount || 0) - Number(row.received_amount || 0); return <tr key={row.id}><td style={styles.td}>{row.invoice_date}</td><td style={styles.td}>{row.invoice_no}</td><td style={styles.td}>{row.customers?.name || "—"}</td><td style={styles.td}>{money(row.total_amount)}</td><td style={styles.td}>{money(row.received_amount)}</td><td style={{...styles.td, fontWeight: 700, color: "#b45309"}}>{money(balance)}</td></tr>; })}</tbody></table></div>}</section>
   </main>;
 }
 
