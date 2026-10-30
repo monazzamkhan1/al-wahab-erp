@@ -16,6 +16,8 @@ export default function SalesPage() {
   const [receivedAmount, setReceivedAmount] = useState("");
   const [notes, setNotes] = useState("");
   const [productId, setProductId] = useState("");
+  const [productSearch, setProductSearch] = useState("");
+  const [showProductMatches, setShowProductMatches] = useState(false);
   const [batchId, setBatchId] = useState("");
   const [quantity, setQuantity] = useState("");
   const [bonusQuantity, setBonusQuantity] = useState("");
@@ -77,6 +79,35 @@ export default function SalesPage() {
     setBatches(data || []);
   }
 
+  function productLabel(product) {
+    return `${product.product_name || ""}${product.pack_size ? ` (${product.pack_size})` : ""}${product.product_code ? ` — ${product.product_code}` : ""}`;
+  }
+
+  function clearProductSelection() {
+    setProductId("");
+    setBatchId("");
+    setBatches([]);
+    setSaleRate("");
+  }
+
+  function handleProductSearchChange(value) {
+    setProductSearch(value);
+    setShowProductMatches(true);
+    const selected = products.find((product) => product.id === productId);
+    if (!selected || value !== productLabel(selected)) clearProductSelection();
+  }
+
+  function chooseProduct(product) {
+    setProductSearch(productLabel(product));
+    setShowProductMatches(false);
+    selectProduct(product.id);
+  }
+
+  const matchingProducts = useMemo(() => {
+    const search = productSearch.trim().toLowerCase();
+    return products.filter((product) => !search || [product.product_name, product.product_code, product.pack_size].filter(Boolean).join(" ").toLowerCase().includes(search)).slice(0, 20);
+  }, [products, productSearch]);
+
   function selectCustomer(value) {
     setCustomerId(value);
     const customer = customers.find((item) => item.id === value);
@@ -88,7 +119,7 @@ export default function SalesPage() {
     const batch = batches.find((item) => item.id === value);
     const product = products.find((item) => item.id === productId);
     const tpRate = Number(product?.mrp || 0) * (1 - Number(product?.tp_discount_percent ?? 15) / 100);
-    setSaleRate(batch?.sale_rate ?? tpRate);
+    setSaleRate(Number(batch?.sale_rate || 0) > 0 ? batch.sale_rate : tpRate);
     if (customerId && productId) {
       const { data } = await supabase.from("customer_product_prices").select("sale_rate").eq("customer_id", customerId).eq("product_id", productId).maybeSingle();
       if (data?.sale_rate !== undefined && data?.sale_rate !== null) setSaleRate(data.sale_rate);
@@ -138,6 +169,8 @@ export default function SalesPage() {
       },
     ]);
     setProductId("");
+    setProductSearch("");
+    setShowProductMatches(false);
     setBatchId("");
     setQuantity("");
     setBonusQuantity("");
@@ -263,10 +296,12 @@ export default function SalesPage() {
           <h2 style={styles.sectionTitle}>Add Sale Item</h2>
           <div style={styles.grid}>
             <label style={styles.label}>Product *
-              <select value={productId} onChange={(e) => selectProduct(e.target.value)} style={styles.input} disabled={loading}>
-                <option value="">Select Product</option>
-                {products.map((product) => <option key={product.id} value={product.id}>{product.product_code ? product.product_code + " - " : ""}{product.product_name}</option>)}
-              </select>
+              <div style={styles.productPicker}>
+                <input value={productSearch} onChange={(e) => handleProductSearchChange(e.target.value)} onFocus={() => setShowProductMatches(true)} style={styles.input} disabled={loading} placeholder="Product name, code ya pack size type karein" autoComplete="off" />
+                {showProductMatches && <div style={styles.productMenu}>
+                  {matchingProducts.length ? matchingProducts.map((product) => <button key={product.id} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => chooseProduct(product)} style={styles.productOption}><strong>{product.product_name}</strong><span>{product.pack_size || "No pack size"}{product.product_code ? ` · ${product.product_code}` : ""}</span></button>) : <div style={styles.noProductMatch}>Koi matching product nahi mila.</div>}
+                </div>}
+              </div>
             </label>
             <label style={styles.label}>Batch *
               <select value={batchId} onChange={(e) => selectBatch(e.target.value)} style={styles.input} disabled={!productId}>
@@ -325,6 +360,7 @@ const styles = {
   sectionTitle: { marginTop: 0, marginBottom: "18px", fontSize: "20px" }, grid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "15px" },
   label: { display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "14px" },
   input: { width: "100%", boxSizing: "border-box", marginTop: "7px", padding: "11px", border: "1px solid #d0d5dd", borderRadius: "8px", background: "#fff", fontSize: "14px" },
+  productPicker: { position: "relative", marginTop: "7px" }, productMenu: { position: "absolute", zIndex: 20, width: "100%", maxHeight: "270px", overflowY: "auto", background: "#fff", border: "1px solid #d0d5dd", borderRadius: "8px", boxShadow: "0 10px 20px rgba(16,24,40,.12)" }, productOption: { width: "100%", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "3px", border: "none", borderBottom: "1px solid #eaecf0", background: "#fff", padding: "10px 12px", textAlign: "left", cursor: "pointer", color: "#172033" }, noProductMatch: { padding: "12px", color: "#667085", fontWeight: 400 },
   textarea: { width: "100%", boxSizing: "border-box", marginTop: "7px", padding: "11px", border: "1px solid #d0d5dd", borderRadius: "8px", resize: "vertical", fontFamily: "inherit" },
   addButton: { border: "none", background: "#2563eb", color: "#fff", padding: "11px 18px", borderRadius: "8px", cursor: "pointer", fontWeight: "600" },
   lineTotal: { display: "flex", justifyContent: "space-between", background: "#f8fafc", padding: "13px", borderRadius: "8px", marginBottom: "15px" },
