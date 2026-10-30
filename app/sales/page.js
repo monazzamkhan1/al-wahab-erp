@@ -253,7 +253,7 @@ export default function SalesPage() {
             <h1 style={styles.title}>Sales Management</h1>
             <p style={styles.subtitle}>Customer sales, stock OUT aur receivables manage karein.</p>
           </div>
-          <a href="/" style={styles.back}>← Dashboard</a>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}><a href="/sales/invoices" style={styles.back}>Saved Invoices</a><a href="/" style={styles.back}>← Dashboard</a></div>
         </header>
 
         {message && <div style={styles.message}>{message}</div>}
