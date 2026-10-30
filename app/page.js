@@ -151,7 +151,7 @@ export default function Home() {
         ? "..."
         : formatCurrency(dashboardData?.receivables),
       icon: "💰",
-      link: "#",
+      link: "/receivables",
     },
     {
       title: "Payables",
@@ -159,7 +159,7 @@ export default function Home() {
         ? "..."
         : formatCurrency(dashboardData?.payables),
       icon: "💸",
-      link: "#",
+      link: "/payables",
     },
   ];
 
@@ -171,10 +171,10 @@ export default function Home() {
     { label: "🧾 Sales", link: "/sales" },
     { label: "📒 Commission Ledger", link: "/commission-ledger" },
     { label: "🛒 Purchases", link: "/purchases" },
-    { label: "💰 Accounts", link: "#" },
-    { label: "📈 Reports", link: "#" },
-    { label: "👥 Users", link: "#" },
-    { label: "⚙️ Settings", link: "#" },
+    { label: "💰 Accounts", link: "/accounts" },
+    { label: "📈 Reports", link: "/reports" },
+    { label: "👥 Users", link: "/users" },
+    { label: "⚙️ Settings", link: "/settings" },
   ];
 
   const quickActions = [
