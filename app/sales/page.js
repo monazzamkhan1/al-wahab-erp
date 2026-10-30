@@ -166,7 +166,7 @@ export default function SalesPage() {
       const { data: saleId, error } = await supabase.rpc("save_sale_with_stock", {
         p_customer_id: customerId,
         p_invoice_no: invoiceNo.trim(),
-        p_sale_date: saleDate,
+        p_invoice_date: saleDate,
         p_total_amount: total,
         p_received_amount: received,
         p_notes: notes || null,
