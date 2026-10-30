@@ -166,6 +166,7 @@ export default function Home() {
   const sidebarItems = [
     { label: "💊 Products", link: "/products" },
     { label: "📦 Stock", link: "/stock" },
+    { label: "↩️ Stock Returns", link: "/stock-returns" },
     { label: "🏥 Customers", link: "/customers" },
     { label: "🏭 Suppliers", link: "/companies" },
     { label: "🧾 Sales", link: "/sales" },
