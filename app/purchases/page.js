@@ -257,16 +257,23 @@ export default function PurchasesPage() {
   const paid = Number(paidAmount || 0);
   const balance = Math.max(grandTotal - paid, 0);
 
+  function generateInternalPurchaseNo() {
+    const datePart = (invoiceDate || new Date().toISOString().slice(0, 10))
+      .replaceAll("-", "");
+    const uniquePart = `${Date.now().toString().slice(-6)}${Math.floor(
+      Math.random() * 1000
+    )
+      .toString()
+      .padStart(3, "0")}`;
+
+    return `PUR-${datePart}-${uniquePart}`;
+  }
+
   async function savePurchase() {
   setMessage("");
 
   if (!supplierId) {
     setMessage("Supplier select karein.");
-    return;
-  }
-
-  if (!invoiceNo.trim()) {
-    setMessage("Invoice No. enter karein.");
     return;
   }
 
@@ -283,6 +290,7 @@ export default function PurchasesPage() {
   setSaving(true);
 
   try {
+    const purchaseInvoiceNo = invoiceNo.trim() || generateInternalPurchaseNo();
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -308,7 +316,7 @@ export default function PurchasesPage() {
       "save_purchase_with_stock",
       {
         p_supplier_id: supplierId,
-        p_invoice_no: invoiceNo.trim(),
+        p_invoice_no: purchaseInvoiceNo,
         p_invoice_date: invoiceDate,
         p_total_amount: grandTotal,
         p_paid_amount: paid,
@@ -324,7 +332,10 @@ export default function PurchasesPage() {
 
     setMessage(
       "Purchase successfully saved aur Stock IN update ho gaya. Purchase ID: " +
-        purchaseId
+        purchaseId +
+        (invoiceNo.trim()
+          ? ""
+          : ` | Internal No.: ${purchaseInvoiceNo}`)
     );
 
     setSupplierId("");
@@ -382,11 +393,11 @@ export default function PurchasesPage() {
             </label>
 
             <label style={styles.label}>
-              Invoice No. *
+              Supplier Invoice No. (Optional)
               <input
                 value={invoiceNo}
                 onChange={(e) => setInvoiceNo(e.target.value)}
-                placeholder="Supplier invoice number"
+                placeholder="Blank chhor dein to internal number ban jayega"
                 style={styles.input}
               />
             </label>
