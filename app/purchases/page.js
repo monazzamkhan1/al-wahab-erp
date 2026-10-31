@@ -94,7 +94,7 @@ export default function PurchasesPage() {
         "id, batch_no, manufacturing_date, expiry_date, purchase_rate, sale_rate, quantity"
       )
       .eq("product_id", productIdValue)
-      .order("created_at", { ascending: false });
+      .order("expiry_date", { ascending: false });
 
     if (error) {
       setMessage("Batches load nahi ho sake: " + error.message);
