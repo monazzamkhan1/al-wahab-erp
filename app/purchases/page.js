@@ -9,6 +9,7 @@ export default function PurchasesPage() {
   const [batches, setBatches] = useState([]);
 
   const [supplierId, setSupplierId] = useState("");
+  const [supplierSearch, setSupplierSearch] = useState("");
   const [invoiceNo, setInvoiceNo] = useState("");
   const [invoiceDate, setInvoiceDate] = useState(
     new Date().toISOString().split("T")[0]
@@ -27,6 +28,7 @@ export default function PurchasesPage() {
   const [expiryDate, setExpiryDate] = useState("");
   const [quantity, setQuantity] = useState("");
   const [purchaseRate, setPurchaseRate] = useState("");
+  const [mrp, setMrp] = useState("");
   const [discount, setDiscount] = useState("");
   const [tax, setTax] = useState("");
 
@@ -57,7 +59,7 @@ export default function PurchasesPage() {
   async function loadProducts() {
     const { data, error } = await supabase
       .from("products")
-      .select("id, product_code, product_name, pack_size")
+      .select("id, product_code, product_name, pack_size, mrp, purchase_rate")
       .eq("is_active", true)
       .order("product_name");
 
@@ -81,24 +83,35 @@ export default function PurchasesPage() {
         "id, batch_no, manufacturing_date, expiry_date, purchase_rate, sale_rate, quantity"
       )
       .eq("product_id", productIdValue)
-      .order("expiry_date");
+      .order("created_at", { ascending: false });
 
     if (error) {
       setMessage("Batches load nahi ho sake: " + error.message);
-      return;
+      return [];
     }
 
     setBatches(data || []);
+    return data || [];
   }
 
-  function handleProductChange(value) {
+  async function handleProductChange(value, product = null) {
     setProductId(value);
     setBatchId("");
     setBatchNo("");
     setManufacturingDate("");
     setExpiryDate("");
     setPurchaseRate("");
-    loadBatches(value);
+    setMrp(product?.mrp ?? "");
+    if (product?.purchase_rate !== null && product?.purchase_rate !== undefined) setPurchaseRate(product.purchase_rate);
+    const loadedBatches = await loadBatches(value);
+    const latestBatch = loadedBatches[0];
+    if (latestBatch) {
+      setBatchId(latestBatch.id);
+      setBatchNo(latestBatch.batch_no || "");
+      setManufacturingDate(latestBatch.manufacturing_date || "");
+      setExpiryDate(latestBatch.expiry_date || "");
+      if (latestBatch.purchase_rate !== null && latestBatch.purchase_rate !== undefined) setPurchaseRate(latestBatch.purchase_rate);
+    }
   }
 
   function productLabel(product) {
@@ -114,6 +127,7 @@ export default function PurchasesPage() {
     setManufacturingDate("");
     setExpiryDate("");
     setPurchaseRate("");
+    setMrp("");
     setBatches([]);
   }
 
@@ -129,7 +143,7 @@ export default function PurchasesPage() {
   function selectProduct(product) {
     setProductSearch(productLabel(product));
     setShowProductMatches(false);
-    handleProductChange(product.id);
+    handleProductChange(product.id, product);
   }
 
   const matchingProducts = useMemo(() => {
@@ -223,6 +237,7 @@ export default function PurchasesPage() {
       expiry_date: expiryDate || null,
       quantity: qty,
       purchase_rate: rate,
+      mrp: Number(mrp || 0),
       discount: disc,
       tax: taxAmount,
       amount,
@@ -239,6 +254,7 @@ export default function PurchasesPage() {
     setExpiryDate("");
     setQuantity("");
     setPurchaseRate("");
+    setMrp("");
     setDiscount("");
     setTax("");
     setBatches([]);
@@ -330,6 +346,12 @@ export default function PurchasesPage() {
       throw error;
     }
 
+    const latestDefaults = new Map();
+    items.forEach((item) => latestDefaults.set(item.product_id, { mrp: item.mrp, purchase_rate: item.purchase_rate }));
+    const productUpdates = await Promise.all([...latestDefaults.entries()].map(([id, defaults]) => supabase.from("products").update(defaults).eq("id", id)));
+    const productUpdateError = productUpdates.find((result) => result.error)?.error;
+    if (productUpdateError) throw productUpdateError;
+
     setMessage(
       "Purchase successfully saved aur Stock IN update ho gaya. Purchase ID: " +
         purchaseId +
@@ -339,6 +361,7 @@ export default function PurchasesPage() {
     );
 
     setSupplierId("");
+    setSupplierSearch("");
     setInvoiceNo("");
     setInvoiceDate(new Date().toISOString().split("T")[0]);
     setPaidAmount("");
@@ -375,19 +398,19 @@ export default function PurchasesPage() {
           <div style={styles.formGrid}>
             <label style={styles.label}>
               Supplier *
-              <select
-                value={supplierId}
-                onChange={(e) => setSupplierId(e.target.value)}
+              <input
+                list="purchase-suppliers"
+                value={supplierSearch}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setSupplierSearch(value);
+                  const selected = suppliers.find((supplier) => supplier.name.toLowerCase() === value.trim().toLowerCase());
+                  setSupplierId(selected?.id || "");
+                }}
+                placeholder="Type supplier name, then select from list"
                 style={styles.input}
-              >
-                <option value="">Select Supplier</option>
-
-                {suppliers.map((supplier) => (
-                  <option key={supplier.id} value={supplier.id}>
-                    {supplier.name}
-                  </option>
-                ))}
-              </select>
+              />
+              <datalist id="purchase-suppliers">{suppliers.map((supplier) => <option key={supplier.id} value={supplier.name} />)}</datalist>
             </label>
 
             <label style={styles.label}>
@@ -547,6 +570,17 @@ export default function PurchasesPage() {
                 value={purchaseRate}
                 onChange={(e) => setPurchaseRate(e.target.value)}
                 placeholder="0"
+                style={styles.input}
+              />
+            </label>
+
+            <label style={styles.label}>
+              MRP
+              <input
+                type="number"
+                value={mrp}
+                onChange={(e) => setMrp(e.target.value)}
+                placeholder="Auto from product - editable"
                 style={styles.input}
               />
             </label>
