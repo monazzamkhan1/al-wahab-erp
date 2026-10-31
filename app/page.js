@@ -206,8 +206,9 @@ export default function Home() {
           gap: "15px",
         }}
       >
-        <div>
-          <h1 style={{ margin: 0, fontSize: "22px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <img src="/images/al-wahab-logo-transparent.png" alt="Al Wahab Enterprises" style={{ width: "48px", height: "48px", objectFit: "contain" }} />
+          <div><h1 style={{ margin: 0, fontSize: "22px" }}>
             Al Wahab Enterprises
           </h1>
 
@@ -219,7 +220,7 @@ export default function Home() {
             }}
           >
             Pharmaceutical Distribution Management System
-          </p>
+          </p></div>
         </div>
 
         <button
