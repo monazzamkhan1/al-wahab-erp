@@ -1,34 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabase";
-
 const money = (value) => `Rs. ${Number(value || 0).toLocaleString("en-PK")}`;
 
 export default function SalesInvoicesPage() {
-  const [invoices, setInvoices] = useState([]);
-  const [customers, setCustomers] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
+  const [invoices, setInvoices] = useState([]); const [items, setItems] = useState([]); const [customers, setCustomers] = useState({}); const [products, setProducts] = useState({}); const [loading, setLoading] = useState(true); const [error, setError] = useState("");
+  const [customerFilter, setCustomerFilter] = useState(""); const [productFilter, setProductFilter] = useState(""); const [supplierFilter, setSupplierFilter] = useState("");
   useEffect(() => { loadInvoices(); }, []);
   async function loadInvoices() {
     setLoading(true); setError("");
     const { data, error: loadError } = await supabase.from("sales").select("id,customer_id,invoice_no,sale_date,total_amount,received_amount,booker_name,supplier_name,notes,created_at").order("sale_date", { ascending: false }).order("created_at", { ascending: false });
     if (loadError) { setError(loadError.message); setLoading(false); return; }
-    setInvoices(data || []);
-    const ids = [...new Set((data || []).map((row) => row.customer_id).filter(Boolean))];
-    if (ids.length) {
-      const { data: partyData } = await supabase.from("customers").select("id,name").in("id", ids);
-      setCustomers(Object.fromEntries((partyData || []).map((row) => [row.id, row.name])));
-    }
-    setLoading(false);
+    const rows = data || []; setInvoices(rows);
+    const invoiceIds = rows.map((row) => row.id); const customerIds = [...new Set(rows.map((row) => row.customer_id).filter(Boolean))];
+    const [itemResult, customerResult] = await Promise.all([invoiceIds.length ? supabase.from("sale_items").select("id,sale_id,product_id,quantity,bonus_quantity,amount").in("sale_id", invoiceIds) : Promise.resolve({ data: [] }), customerIds.length ? supabase.from("customers").select("id,name").in("id", customerIds) : Promise.resolve({ data: [] })]);
+    if (itemResult.error) { setError(itemResult.error.message); setLoading(false); return; }
+    const lineItems = itemResult.data || []; const productIds = [...new Set(lineItems.map((item) => item.product_id).filter(Boolean))];
+    const productResult = productIds.length ? await supabase.from("products").select("id,product_name,pack_size").in("id", productIds) : { data: [] };
+    setItems(lineItems); setCustomers(Object.fromEntries((customerResult.data || []).map((row) => [row.id, row.name]))); setProducts(Object.fromEntries((productResult.data || []).map((row) => [row.id, row]))); setLoading(false);
   }
-
-  return <main style={s.page}><div style={s.wrap}>
-    <header style={s.header}><div><h1 style={s.title}>Sales Invoices</h1><p style={s.sub}>Purani invoices open, print ya PDF save karein.</p></div><div style={s.actions}><a href="/sales" style={s.primary}>+ New Sale</a><a href="/" style={s.back}>← Dashboard</a></div></header>
-    {error && <div style={s.error}>Invoices load nahi ho sakin: {error}<button onClick={loadInvoices} style={s.retry}>Retry</button></div>}
-    <section style={s.card}>{loading ? <p>Loading invoices...</p> : !invoices.length ? <p style={s.muted}>Abhi koi saved sale invoice nahi hai.</p> : <div style={s.scroll}><table style={s.table}><thead><tr><th>Date</th><th>Invoice No.</th><th>Customer</th><th>Booker / Supplier</th><th>Total</th><th>Received</th><th>Balance</th><th></th></tr></thead><tbody>{invoices.map((invoice) => <tr key={invoice.id}><td>{invoice.sale_date}</td><td><strong>{invoice.invoice_no}</strong></td><td>{customers[invoice.customer_id] || "Customer"}</td><td>{[invoice.booker_name, invoice.supplier_name].filter(Boolean).join(" · ") || "-"}</td><td>{money(invoice.total_amount)}</td><td>{money(invoice.received_amount)}</td><td>{money(Number(invoice.total_amount || 0) - Number(invoice.received_amount || 0))}</td><td><div style={s.rowActions}><a href={`/sales/invoices/${invoice.id}`} style={s.open}>Open / Print</a><a href={`/sales/invoices/${invoice.id}/edit`} style={s.open}>Edit Details</a></div></td></tr>)}</tbody></table></div>}</section>
+  const productByInvoice = useMemo(() => items.reduce((map, item) => { (map[item.sale_id] ||= []).push(item); return map; }, {}), [items]);
+  const suppliedBy = [...new Set(invoices.map((invoice) => invoice.supplier_name).filter(Boolean))];
+  const filtered = invoices.filter((invoice) => (!customerFilter || invoice.customer_id === customerFilter) && (!supplierFilter || invoice.supplier_name === supplierFilter) && (!productFilter || (productByInvoice[invoice.id] || []).some((item) => item.product_id === productFilter)));
+  const totals = filtered.reduce((sum, invoice) => ({ total: sum.total + Number(invoice.total_amount || 0), received: sum.received + Number(invoice.received_amount || 0) }), { total: 0, received: 0 });
+  return <main style={s.page}><div style={s.wrap}><header style={s.header}><div><h1 style={s.title}>Sales Register</h1><p style={s.sub}>Customer, product aur Supplied By ke mutabiq sales summary.</p></div><div style={s.actions}><a href="/sales" style={s.primary}>+ New Sale</a><a href="/" style={s.back}>← Dashboard</a></div></header>{error && <div style={s.error}>Invoices load nahi ho sakin: {error}<button onClick={loadInvoices} style={s.retry}>Retry</button></div>}
+    <section style={s.card}><div style={s.filters}><label>Customer<select value={customerFilter} onChange={(event) => setCustomerFilter(event.target.value)}><option value="">All Customers</option>{Object.entries(customers).map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label><label>Product<select value={productFilter} onChange={(event) => setProductFilter(event.target.value)}><option value="">All Products</option>{Object.entries(products).map(([id, product]) => <option key={id} value={id}>{product.product_name}{product.pack_size ? ` (${product.pack_size})` : ""}</option>)}</select></label><label>Supplied By<select value={supplierFilter} onChange={(event) => setSupplierFilter(event.target.value)}><option value="">All Suppliers</option>{suppliedBy.map((name) => <option key={name} value={name}>{name}</option>)}</select></label></div><div style={s.summary}><div><span>Invoices</span><strong>{filtered.length}</strong></div><div><span>Total Sale</span><strong>{money(totals.total)}</strong></div><div><span>Received</span><strong>{money(totals.received)}</strong></div><div><span>Receivable</span><strong>{money(totals.total - totals.received)}</strong></div></div></section>
+    <section style={s.card}>{loading ? <p>Loading invoices...</p> : !filtered.length ? <p style={s.muted}>Selected filters mein koi sale invoice nahi hai.</p> : <div style={s.scroll}><table style={s.table}><thead><tr><th>Date</th><th>Invoice</th><th>Customer</th><th>Supplied By</th><th>Products</th><th>Total</th><th>Received</th><th>Balance</th><th></th></tr></thead><tbody>{filtered.map((invoice) => <tr key={invoice.id}><td>{invoice.sale_date}</td><td><strong>{invoice.invoice_no}</strong></td><td>{customers[invoice.customer_id] || "Customer"}</td><td>{invoice.supplier_name || "-"}</td><td>{(productByInvoice[invoice.id] || []).map((item) => products[item.product_id]?.product_name || "Product").join(", ") || "-"}</td><td>{money(invoice.total_amount)}</td><td>{money(invoice.received_amount)}</td><td>{money(Number(invoice.total_amount || 0) - Number(invoice.received_amount || 0))}</td><td><div style={s.rowActions}><a href={`/sales/invoices/${invoice.id}`} style={s.open}>Print</a><a href={`/sales/invoices/${invoice.id}/edit`} style={s.open}>Edit</a></div></td></tr>)}</tbody></table></div>}</section>
   </div></main>;
 }
-const s={page:{minHeight:"100vh",background:"#f5f7fb",padding:"30px 16px",fontFamily:"Arial,Helvetica,sans-serif",color:"#172033"},wrap:{maxWidth:1250,margin:"0 auto"},header:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16,marginBottom:20,flexWrap:"wrap"},title:{margin:"0 0 6px",fontSize:30},sub:{margin:0,color:"#667085"},actions:{display:"flex",gap:10,flexWrap:"wrap"},primary:{background:"#2563eb",color:"#fff",textDecoration:"none",padding:"10px 15px",borderRadius:8,fontWeight:700},back:{background:"#e8edf5",color:"#344054",textDecoration:"none",padding:"10px 15px",borderRadius:8,fontWeight:600},card:{background:"#fff",border:"1px solid #e4e7ec",borderRadius:14,padding:22},scroll:{overflowX:"auto"},table:{width:"100%",minWidth:980,borderCollapse:"collapse"},error:{background:"#fee2e2",color:"#991b1b",padding:14,borderRadius:8,marginBottom:18},retry:{marginLeft:12,border:0,borderRadius:6,padding:"6px 10px",background:"#991b1b",color:"#fff"},muted:{color:"#667085"},rowActions:{display:"flex",gap:10,whiteSpace:"nowrap"},open:{color:"#2563eb",fontWeight:700,textDecoration:"none"}};
+const s={page:{minHeight:"100vh",background:"#f5f7fb",padding:"30px 16px",fontFamily:"Arial,Helvetica,sans-serif",color:"#172033"},wrap:{maxWidth:1350,margin:"0 auto"},header:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16,marginBottom:20,flexWrap:"wrap"},title:{margin:"0 0 6px",fontSize:30},sub:{margin:0,color:"#667085"},actions:{display:"flex",gap:10,flexWrap:"wrap"},primary:{background:"#2563eb",color:"#fff",textDecoration:"none",padding:"10px 15px",borderRadius:8,fontWeight:700},back:{background:"#e8edf5",color:"#344054",textDecoration:"none",padding:"10px 15px",borderRadius:8,fontWeight:600},card:{background:"#fff",border:"1px solid #e4e7ec",borderRadius:14,padding:22,marginBottom:18},filters:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:14},summary:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:14,marginTop:20},scroll:{overflowX:"auto"},table:{width:"100%",minWidth:1200,borderCollapse:"collapse"},rowActions:{display:"flex",gap:10},open:{color:"#2563eb",fontWeight:700,textDecoration:"none"},error:{background:"#fee2e2",color:"#991b1b",padding:14,borderRadius:8,marginBottom:18},retry:{marginLeft:12,border:0,borderRadius:6,padding:"6px 10px",background:"#991b1b",color:"#fff"},muted:{color:"#667085"}};
