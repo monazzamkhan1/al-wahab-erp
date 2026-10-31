@@ -5,11 +5,14 @@ import { supabase } from "../supabase";
 
 export default function SalesPage() {
   const [customers, setCustomers] = useState([]);
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [bookers, setBookers] = useState([]);
+  const [suppliedByOptions, setSuppliedByOptions] = useState([]);
   const [products, setProducts] = useState([]);
   const [batches, setBatches] = useState([]);
   const [customerId, setCustomerId] = useState("");
   const [applyCommission, setApplyCommission] = useState(false);
-  const [invoiceNo, setInvoiceNo] = useState("");
+  const [invoiceNo, setInvoiceNo] = useState(() => generateSaleInvoiceNo());
   const [saleDate, setSaleDate] = useState(
     new Date().toISOString().slice(0, 10)
   );
@@ -37,13 +40,15 @@ export default function SalesPage() {
 
   async function loadInitialData() {
     setLoading(true);
-    const [customerResult, productResult] = await Promise.all([
+    const [customerResult, productResult, companyResult, historyResult] = await Promise.all([
       supabase.from("customers").select("id, name, commission_holder_id, commission_percent, commission_enabled_default, commission_holders(name)").order("name"),
       supabase
         .from("products")
         .select("id, product_code, product_name, pack_size, mrp, tp_discount_percent, is_milk_formula")
         .eq("is_active", true)
         .order("product_name"),
+      supabase.from("companies").select("name").in("company_type", ["supplier", "both"]).order("name"),
+      supabase.from("sales").select("booker_name,supplier_name").order("created_at", { ascending: false }).limit(200),
     ]);
 
     if (customerResult.error || productResult.error) {
@@ -54,6 +59,9 @@ export default function SalesPage() {
     } else {
       setCustomers(customerResult.data || []);
       setProducts(productResult.data || []);
+      const history = historyResult.data || [];
+      setBookers([...new Set(history.map((row) => row.booker_name).filter(Boolean))]);
+      setSuppliedByOptions([...new Set([...(companyResult.data || []).map((row) => row.name), ...history.map((row) => row.supplier_name).filter(Boolean)])]);
     }
     setLoading(false);
   }
@@ -112,6 +120,17 @@ export default function SalesPage() {
     setCustomerId(value);
     const customer = customers.find((item) => item.id === value);
     setApplyCommission(Boolean(customer?.commission_enabled_default && customer?.commission_holder_id && Number(customer?.commission_percent) > 0));
+  }
+
+  function chooseCustomer(value) {
+    setCustomerSearch(value);
+    const selected = customers.find((customer) => customer.name.toLowerCase() === value.trim().toLowerCase());
+    selectCustomer(selected?.id || "");
+  }
+
+  function generateSaleInvoiceNo() {
+    const date = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+    return `SAL-${date}-${Date.now().toString().slice(-6)}`;
   }
 
   async function selectBatch(value) {
@@ -190,8 +209,8 @@ export default function SalesPage() {
 
   async function saveSale() {
     setMessage("");
-    if (!customerId || !invoiceNo.trim() || items.length === 0) {
-      setMessage("Customer, invoice number aur kam az kam ek item zaroori hai.");
+    if (!customerId || items.length === 0) {
+      setMessage("Customer aur kam az kam ek item zaroori hai.");
       return;
     }
     if (received < 0 || received > total) {
@@ -205,7 +224,7 @@ export default function SalesPage() {
 
       const { data: saleId, error } = await supabase.rpc("save_sale_with_stock", {
         p_customer_id: customerId,
-        p_invoice_no: invoiceNo.trim(),
+        p_invoice_no: invoiceNo.trim() || generateSaleInvoiceNo(),
         p_sale_date: saleDate,
         p_total_amount: total,
         p_received_amount: received,
@@ -229,8 +248,9 @@ export default function SalesPage() {
 
       setMessage("Sale saved, stock updated. Sale ID: " + saleId);
       setCustomerId("");
+      setCustomerSearch("");
       setApplyCommission(false);
-      setInvoiceNo("");
+      setInvoiceNo(generateSaleInvoiceNo());
       setSaleDate(new Date().toISOString().slice(0, 10));
       setReceivedAmount("");
       setNotes("");
@@ -262,17 +282,15 @@ export default function SalesPage() {
           <h2 style={styles.sectionTitle}>Sale Invoice</h2>
           <div style={styles.grid}>
             <label style={styles.label}>Customer *
-              <select value={customerId} onChange={(e) => selectCustomer(e.target.value)} style={styles.input} disabled={loading}>
-                <option value="">Select Customer</option>
-                {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}
-              </select>
+              <input list="sale-customers" value={customerSearch} onChange={(e) => chooseCustomer(e.target.value)} style={styles.input} disabled={loading} placeholder="Type customer name, then select from list" />
+              <datalist id="sale-customers">{customers.map((customer) => <option key={customer.id} value={customer.name} />)}</datalist>
             </label>
             <label style={{ ...styles.label, display: "flex", alignItems: "center", gap: "8px", paddingTop: "28px" }}>
               <input type="checkbox" checked={applyCommission} disabled={!selectedCustomer?.commission_holder_id || !Number(selectedCustomer?.commission_percent)} onChange={(e) => setApplyCommission(e.target.checked)} />
               Apply commission{selectedCustomer?.commission_holders?.name ? ` for ${selectedCustomer.commission_holders.name} (${Number(selectedCustomer.commission_percent || 0)}% on TP)` : " (set it in Customer first)"}
             </label>
-            <label style={styles.label}>Invoice No. *
-              <input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} style={styles.input} placeholder="Sale invoice number" />
+            <label style={styles.label}>Invoice No. (Auto Generated)
+              <input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} style={styles.input} placeholder="Auto invoice number" />
             </label>
             <label style={styles.label}>Sale Date
               <input type="date" value={saleDate} onChange={(e) => setSaleDate(e.target.value)} style={styles.input} />
@@ -280,16 +298,24 @@ export default function SalesPage() {
             <label style={styles.label}>Received Amount
               <input type="number" value={receivedAmount} onChange={(e) => setReceivedAmount(e.target.value)} style={styles.input} placeholder="0" min="0" />
             </label>
-            <label style={styles.label}>Booker Name (Optional)
-              <input value={bookerName} onChange={(e) => setBookerName(e.target.value)} style={styles.input} placeholder="Booker / sales person" />
-            </label>
-            <label style={styles.label}>Supplier Name (Optional)
-              <input value={supplierName} onChange={(e) => setSupplierName(e.target.value)} style={styles.input} placeholder="Supplier / distributor" />
-            </label>
           </div>
           <label style={styles.label}>Notes
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} style={styles.textarea} rows={3} placeholder="Optional sale notes" />
           </label>
+        </section>
+
+        <section style={styles.card}>
+          <h2 style={styles.sectionTitle}>Invoice People (Optional)</h2>
+          <div style={styles.grid}>
+            <label style={styles.label}>Booker Name
+              <input list="sale-bookers" value={bookerName} onChange={(e) => setBookerName(e.target.value)} style={styles.input} placeholder="Type or select booker" />
+              <datalist id="sale-bookers">{bookers.map((name) => <option key={name} value={name} />)}</datalist>
+            </label>
+            <label style={styles.label}>Supplied By
+              <input list="sale-supplied-by" value={supplierName} onChange={(e) => setSupplierName(e.target.value)} style={styles.input} placeholder="Type or select supplier / distributor" />
+              <datalist id="sale-supplied-by">{suppliedByOptions.map((name) => <option key={name} value={name} />)}</datalist>
+            </label>
+          </div>
         </section>
 
         <section style={styles.card}>
