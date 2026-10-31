@@ -7,6 +7,7 @@ export default function PurchasesPage() {
   const [suppliers, setSuppliers] = useState([]);
   const [products, setProducts] = useState([]);
   const [batches, setBatches] = useState([]);
+  const [recentPurchases, setRecentPurchases] = useState([]);
 
   const [supplierId, setSupplierId] = useState("");
   const [supplierSearch, setSupplierSearch] = useState("");
@@ -38,6 +39,7 @@ export default function PurchasesPage() {
   useEffect(() => {
     loadSuppliers();
     loadProducts();
+    loadRecentPurchases();
   }, []);
 
   async function loadSuppliers() {
@@ -69,6 +71,15 @@ export default function PurchasesPage() {
     }
 
     setProducts(data || []);
+  }
+
+  async function loadRecentPurchases() {
+    const { data, error } = await supabase.from("purchases").select("id,supplier_id,invoice_no,invoice_date,total_amount,paid_amount,created_at").order("invoice_date", { ascending: false }).order("created_at", { ascending: false }).limit(15);
+    if (error) { setMessage("Purchase register load nahi ho saka: " + error.message); return; }
+    const ids = [...new Set((data || []).map((row) => row.supplier_id).filter(Boolean))];
+    const { data: supplierData } = ids.length ? await supabase.from("companies").select("id,name").in("id", ids) : { data: [] };
+    const names = Object.fromEntries((supplierData || []).map((row) => [row.id, row.name]));
+    setRecentPurchases((data || []).map((row) => ({ ...row, supplier_name: names[row.supplier_id] || "Supplier" })));
   }
 
   async function loadBatches(productIdValue) {
@@ -265,6 +276,15 @@ export default function PurchasesPage() {
     setItems((prev) => prev.filter((item) => item.tempId !== tempId));
   }
 
+  async function deletePurchase(purchase) {
+    if (!window.confirm(`Delete purchase ${purchase.invoice_no}? Stock aur purchase record reverse ho jayega. Ye action tabhi chalega jab is stock mein se sale na hui ho.`)) return;
+    setSaving(true); setMessage("");
+    const { error } = await supabase.rpc("delete_purchase_with_stock", { p_purchase_id: purchase.id });
+    if (error) setMessage("Purchase delete nahi ho saki: " + error.message);
+    else { setMessage(`Purchase ${purchase.invoice_no} delete aur stock reverse ho gaya.`); await loadRecentPurchases(); }
+    setSaving(false);
+  }
+
   const grandTotal = items.reduce(
     (sum, item) => sum + Number(item.amount || 0),
     0
@@ -367,6 +387,7 @@ export default function PurchasesPage() {
     setPaidAmount("");
     setNotes("");
     setItems([]);
+    await loadRecentPurchases();
   } catch (error) {
     console.error(error);
     setMessage("Purchase save nahi ho saki: " + error.message);
@@ -724,6 +745,11 @@ export default function PurchasesPage() {
             {saving ? "Saving Purchase..." : "Save Purchase"}
           </button>
         </section>
+
+        <section style={styles.card}>
+          <div style={styles.sectionHeader}><div><h2 style={styles.sectionTitle}>Purchase Register</h2><p style={styles.helper}>Recent purchases, supplier-wise amount aur safe actions.</p></div><a href="/purchases/invoices" style={styles.backButton}>View All Invoices</a></div>
+          {!recentPurchases.length ? <p style={styles.helper}>Abhi koi saved purchase nahi hai.</p> : <div style={styles.tableWrap}><table style={styles.table}><thead><tr><th style={styles.th}>Date</th><th style={styles.th}>Invoice</th><th style={styles.th}>Supplier</th><th style={styles.th}>Total</th><th style={styles.th}>Paid</th><th style={styles.th}>Balance</th><th style={styles.th}>Actions</th></tr></thead><tbody>{recentPurchases.map((purchase) => <tr key={purchase.id}><td style={styles.td}>{purchase.invoice_date}</td><td style={styles.td}><strong>{purchase.invoice_no}</strong></td><td style={styles.td}>{purchase.supplier_name}</td><td style={styles.td}>Rs. {Number(purchase.total_amount || 0).toLocaleString()}</td><td style={styles.td}>Rs. {Number(purchase.paid_amount || 0).toLocaleString()}</td><td style={styles.td}>Rs. {(Number(purchase.total_amount || 0) - Number(purchase.paid_amount || 0)).toLocaleString()}</td><td style={styles.td}><div style={styles.actions}><a href={`/purchases/invoices/${purchase.id}`} style={styles.openLink}>Print</a><a href={`/purchases/invoices/${purchase.id}/edit`} style={styles.openLink}>Edit</a><button type="button" onClick={() => deletePurchase(purchase)} disabled={saving} style={styles.deleteButton}>Delete</button></div></td></tr>)}</tbody></table></div>}
+        </section>
       </div>
     </main>
   );
@@ -921,6 +947,38 @@ const styles = {
 
   tableWrapper: {
     overflowX: "auto",
+  },
+
+  tableWrap: {
+    overflowX: "auto",
+  },
+
+  sectionHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: "12px",
+    flexWrap: "wrap",
+    marginBottom: "15px",
+  },
+
+  helper: {
+    margin: "4px 0",
+    color: "#667085",
+    fontSize: "13px",
+  },
+
+  actions: {
+    display: "flex",
+    gap: "8px",
+    alignItems: "center",
+  },
+
+  openLink: {
+    color: "#2563eb",
+    fontWeight: "700",
+    textDecoration: "none",
+    fontSize: "13px",
   },
 
   table: {
