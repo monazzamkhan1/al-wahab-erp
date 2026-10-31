@@ -20,6 +20,7 @@ export default function SalesPage() {
   const [notes, setNotes] = useState("");
   const [productId, setProductId] = useState("");
   const [productSearch, setProductSearch] = useState("");
+  const [genericSearch, setGenericSearch] = useState("");
   const [showProductMatches, setShowProductMatches] = useState(false);
   const [batchId, setBatchId] = useState("");
   const [quantity, setQuantity] = useState("");
@@ -29,6 +30,8 @@ export default function SalesPage() {
   const [tax, setTax] = useState("");
   const [bookerName, setBookerName] = useState("");
   const [supplierName, setSupplierName] = useState("");
+  const [includeWarranty, setIncludeWarranty] = useState(false);
+  const [warrantySigner, setWarrantySigner] = useState("Monazzam Khan");
   const [items, setItems] = useState([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -44,7 +47,7 @@ export default function SalesPage() {
       supabase.from("customers").select("id, name, commission_holder_id, commission_percent, commission_enabled_default, commission_holders(name)").order("name"),
       supabase
         .from("products")
-        .select("id, product_code, product_name, pack_size, mrp, tp_discount_percent, is_milk_formula")
+        .select("id, product_code, product_name, generic_name, pack_size, mrp, tp_discount_percent, is_milk_formula")
         .eq("is_active", true)
         .order("product_name"),
       supabase.from("companies").select("name").in("company_type", ["supplier", "both"]).order("name"),
@@ -113,8 +116,9 @@ export default function SalesPage() {
 
   const matchingProducts = useMemo(() => {
     const search = productSearch.trim().toLowerCase();
-    return products.filter((product) => !search || [product.product_name, product.product_code, product.pack_size].filter(Boolean).join(" ").toLowerCase().includes(search)).slice(0, 20);
-  }, [products, productSearch]);
+    const generic = genericSearch.trim().toLowerCase();
+    return products.filter((product) => (!search || [product.product_name, product.product_code, product.pack_size].filter(Boolean).join(" ").toLowerCase().includes(search)) && (!generic || String(product.generic_name || "").toLowerCase().includes(generic))).slice(0, 20);
+  }, [products, productSearch, genericSearch]);
 
   function selectCustomer(value) {
     setCustomerId(value);
@@ -233,6 +237,8 @@ export default function SalesPage() {
         p_apply_commission: applyCommission,
         p_booker_name: bookerName || "",
         p_supplier_name: supplierName || "",
+        p_include_warranty: includeWarranty,
+        p_warranty_signer: includeWarranty ? warrantySigner : null,
         p_items: items.map(({ product_id, batch_id, quantity, bonus_quantity, sale_rate, discount, tax, amount }) => ({
           product_id,
           batch_id,
@@ -256,6 +262,8 @@ export default function SalesPage() {
       setNotes("");
       setBookerName("");
       setSupplierName("");
+      setIncludeWarranty(false);
+      setWarrantySigner("Monazzam Khan");
       setItems([]);
     } catch (error) {
       console.error(error);
@@ -315,17 +323,24 @@ export default function SalesPage() {
               <input list="sale-supplied-by" value={supplierName} onChange={(e) => setSupplierName(e.target.value)} style={styles.input} placeholder="Type or select supplier / distributor" />
               <datalist id="sale-supplied-by">{suppliedByOptions.map((name) => <option key={name} value={name} />)}</datalist>
             </label>
+            <label style={{ ...styles.label, display: "flex", alignItems: "center", gap: "8px", paddingTop: "28px" }}>
+              <input type="checkbox" checked={includeWarranty} onChange={(e) => setIncludeWarranty(e.target.checked)} /> Include Drugs Act Warranty on invoice
+            </label>
+            {includeWarranty && <label style={styles.label}>Warranty Signatory<select value={warrantySigner} onChange={(e) => setWarrantySigner(e.target.value)} style={styles.input}><option>Monazzam Khan</option><option>Muhammad Usama</option></select></label>}
           </div>
         </section>
 
         <section style={styles.card}>
           <h2 style={styles.sectionTitle}>Add Sale Item</h2>
           <div style={styles.grid}>
+            <label style={styles.label}>Generic Name (Optional)
+              <input value={genericSearch} onChange={(e) => setGenericSearch(e.target.value)} style={styles.input} placeholder="e.g. Omeprazole - related brands show below" />
+            </label>
             <label style={styles.label}>Product *
               <div style={styles.productPicker}>
                 <input value={productSearch} onChange={(e) => handleProductSearchChange(e.target.value)} onFocus={() => setShowProductMatches(true)} style={styles.input} disabled={loading} placeholder="Product name, code ya pack size type karein" autoComplete="off" />
                 {showProductMatches && <div style={styles.productMenu}>
-                  {matchingProducts.length ? matchingProducts.map((product) => <button key={product.id} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => chooseProduct(product)} style={styles.productOption}><strong>{product.product_name}</strong><span>{product.pack_size || "No pack size"}{product.product_code ? ` · ${product.product_code}` : ""}</span></button>) : <div style={styles.noProductMatch}>Koi matching product nahi mila.</div>}
+                  {matchingProducts.length ? matchingProducts.map((product) => <button key={product.id} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => chooseProduct(product)} style={styles.productOption}><strong>{product.product_name}</strong><span>{product.generic_name ? `${product.generic_name} · ` : ""}{product.pack_size || "No pack size"}{product.product_code ? ` · ${product.product_code}` : ""}</span></button>) : <div style={styles.noProductMatch}>Koi matching product nahi mila.</div>}
                 </div>}
               </div>
             </label>
