@@ -43,6 +43,24 @@ export default function Home() {
 
       if (error) throw error;
 
+      const [purchasesResult, supplierPaymentsResult, salesResult, customerPaymentsResult] = await Promise.all([
+        supabase.from("purchases").select("supplier_id,total_amount,paid_amount"),
+        supabase.from("supplier_payments").select("supplier_id,amount"),
+        supabase.from("sales").select("customer_id,total_amount,received_amount"),
+        supabase.from("customer_payments").select("customer_id,amount"),
+      ]);
+      if (purchasesResult.error || supplierPaymentsResult.error || salesResult.error || customerPaymentsResult.error) {
+        throw purchasesResult.error || supplierPaymentsResult.error || salesResult.error || customerPaymentsResult.error;
+      }
+      const netOutstanding = (invoices, payments, partyKey, settledKey) => {
+        const balances = new Map();
+        invoices.forEach((row) => balances.set(row[partyKey], (balances.get(row[partyKey]) || 0) + Number(row.total_amount || 0) - Number(row[settledKey] || 0)));
+        payments.forEach((row) => balances.set(row[partyKey], (balances.get(row[partyKey]) || 0) - Number(row.amount || 0)));
+        return [...balances.values()].reduce((sum, balance) => sum + Math.max(balance, 0), 0);
+      };
+      const payables = netOutstanding(purchasesResult.data || [], supplierPaymentsResult.data || [], "supplier_id", "paid_amount");
+      const receivables = netOutstanding(salesResult.data || [], customerPaymentsResult.data || [], "customer_id", "received_amount");
+
       setDashboardData({
         products: Number(data?.products || 0),
         stock: Number(data?.stock || 0),
@@ -50,8 +68,8 @@ export default function Home() {
         suppliers: Number(data?.suppliers || 0),
         sales: Number(data?.sales || 0),
         purchases: Number(data?.purchases || 0),
-        receivables: Number(data?.receivables || 0),
-        payables: Number(data?.payables || 0),
+        receivables,
+        payables,
       });
     } catch (error) {
       console.error("Dashboard data error:", error);
