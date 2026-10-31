@@ -6,6 +6,7 @@ import { supabase } from "../supabase";
 export default function SalesPage() {
   const [customers, setCustomers] = useState([]);
   const [customerSearch, setCustomerSearch] = useState("");
+  const [showCustomerMatches, setShowCustomerMatches] = useState(false);
   const [bookers, setBookers] = useState([]);
   const [suppliedByOptions, setSuppliedByOptions] = useState([]);
   const [products, setProducts] = useState([]);
@@ -44,7 +45,7 @@ export default function SalesPage() {
   async function loadInitialData() {
     setLoading(true);
     const [customerResult, productResult, companyResult, historyResult] = await Promise.all([
-      supabase.from("customers").select("id, name, commission_holder_id, commission_percent, commission_enabled_default, commission_holders(name)").order("name"),
+      supabase.from("customers").select("id, name, address, contact_person, city, commission_holder_id, commission_percent, commission_enabled_default, commission_holders(name)").order("name"),
       supabase
         .from("products")
         .select("id, product_code, product_name, generic_name, pack_size, mrp, tp_discount_percent, is_milk_formula")
@@ -126,11 +127,17 @@ export default function SalesPage() {
     setApplyCommission(Boolean(customer?.commission_enabled_default && customer?.commission_holder_id && Number(customer?.commission_percent) > 0));
   }
 
-  function chooseCustomer(value) {
-    setCustomerSearch(value);
-    const selected = customers.find((customer) => customer.name.toLowerCase() === value.trim().toLowerCase());
-    selectCustomer(selected?.id || "");
+  function chooseCustomer(customer) {
+    setCustomerSearch(customer.name);
+    setShowCustomerMatches(false);
+    selectCustomer(customer.id);
   }
+
+  const matchingCustomers = useMemo(() => {
+    const search = customerSearch.trim().toLowerCase();
+    if (!search) return customers.slice(0, 20);
+    return customers.filter((customer) => [customer.name, customer.contact_person, customer.address, customer.city].filter(Boolean).join(" ").toLowerCase().includes(search)).slice(0, 20);
+  }, [customers, customerSearch]);
 
   function generateSaleInvoiceNo() {
     const date = new Date().toISOString().slice(0, 10).replaceAll("-", "");
@@ -290,8 +297,12 @@ export default function SalesPage() {
           <h2 style={styles.sectionTitle}>Sale Invoice</h2>
           <div style={styles.grid}>
             <label style={styles.label}>Customer *
-              <input list="sale-customers" value={customerSearch} onChange={(e) => chooseCustomer(e.target.value)} style={styles.input} disabled={loading} placeholder="Type customer name, then select from list" />
-              <datalist id="sale-customers">{customers.map((customer) => <option key={customer.id} value={customer.name} />)}</datalist>
+              <div style={styles.productPicker}>
+                <input value={customerSearch} onChange={(e) => { setCustomerSearch(e.target.value); setCustomerId(""); setShowCustomerMatches(true); }} onFocus={() => setShowCustomerMatches(true)} style={styles.input} disabled={loading} placeholder="Name, doctor, area ya address type karein" autoComplete="off" />
+                {showCustomerMatches && <div style={styles.productMenu}>
+                  {matchingCustomers.length ? matchingCustomers.map((customer) => <button key={customer.id} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => chooseCustomer(customer)} style={styles.productOption}><strong>{customer.name}</strong><span>{[customer.contact_person, customer.address, customer.city].filter(Boolean).join(" · ") || "Customer details not added"}</span></button>) : <div style={styles.noProductMatch}>Koi matching customer nahi mila.</div>}
+                </div>}
+              </div>
             </label>
             <label style={{ ...styles.label, display: "flex", alignItems: "center", gap: "8px", paddingTop: "28px" }}>
               <input type="checkbox" checked={applyCommission} disabled={!selectedCustomer?.commission_holder_id || !Number(selectedCustomer?.commission_percent)} onChange={(e) => setApplyCommission(e.target.checked)} />

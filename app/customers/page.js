@@ -406,8 +406,8 @@ export default function CustomersPage() {
                 name="address"
                 value={form.address}
                 onChange={handleChange}
-                placeholder="Customer address"
-                rows="3"
+                placeholder={"One line per row — e.g.\nC/o Dr. Faheem Akbar Khan\nKacha Road, Kahna Nau\nLahore"}
+                rows="4"
                 style={{
                   ...inputStyle,
                   resize: "vertical",
