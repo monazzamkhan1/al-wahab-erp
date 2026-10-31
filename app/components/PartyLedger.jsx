@@ -55,7 +55,7 @@ export default function PartyLedger({ kind }) {
     if (!fromDate || !toDate || fromDate > toDate) { setError("Valid starting aur ending date select karein."); return; }
     setLoading(true); setError(""); setMessage("");
     const invoiceTable = supplier ? "purchases" : "sales";
-    const invoiceDate = supplier ? "invoice_date" : "sale_date";
+    const invoiceDate = "invoice_date";
     const invoicePartyKey = supplier ? "supplier_id" : "customer_id";
     const paymentTable = supplier ? "supplier_payments" : "customer_payments";
     const paymentPartyKey = supplier ? "supplier_id" : "customer_id";
@@ -87,7 +87,7 @@ export default function PartyLedger({ kind }) {
   const entries = useMemo(() => {
     const invoiceEntries = invoices.flatMap((invoice) => {
       const initial = Number(invoice[supplier ? "paid_amount" : "received_amount"] || 0);
-      const date = invoice[supplier ? "invoice_date" : "sale_date"];
+      const date = invoice.invoice_date;
       return [{ id: `invoice-${invoice.id}`, date, type: "invoice", reference: invoice.invoice_no, narration: invoice.notes || labels.invoice, debit: Number(invoice.total_amount || 0), credit: 0, invoiceId: invoice.id }, ...(initial ? [{ id: `initial-${invoice.id}`, date, type: "payment", reference: invoice.invoice_no, narration: `${supplier ? "Payment sent to supplier" : "Payment received from customer"} at invoice - Cash`, debit: 0, credit: initial, invoiceId: invoice.id }] : [])];
     });
     const paymentEntries = payments.map((payment) => ({ id: `payment-${payment.id}`, date: payment.payment_date, type: "payment", reference: payment.reference_no || "Payment", narration: `${supplier ? "Payment sent to supplier" : "Payment received from customer"} - ${niceMethod(payment.payment_method)}${payment.notes ? ` - ${payment.notes}` : ""}`, debit: 0, credit: Number(payment.amount || 0), invoiceId: payment[supplier ? "purchase_id" : "sale_id"] }));
