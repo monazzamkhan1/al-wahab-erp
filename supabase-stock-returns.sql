@@ -33,7 +33,7 @@ begin
     values(p_customer_id, p_product_id, p_batch_id, p_quantity, p_return_date, nullif(trim(p_reference_no), ''), nullif(trim(p_notes), ''), p_created_by)
     returning id into v_return_id;
   insert into public.stock_movements(product_id, batch_id, movement_type, quantity, reference_no, movement_date, notes)
-    values(p_product_id, p_batch_id, 'customer_return_in', p_quantity, nullif(trim(p_reference_no), ''), p_return_date, p_notes);
+    values(p_product_id, p_batch_id, 'return_in', p_quantity, nullif(trim(p_reference_no), ''), p_return_date, p_notes);
   return v_return_id;
 end;
 $$;
