@@ -4,501 +4,83 @@ import { useEffect, useState } from "react";
 import Login from "./login";
 import { supabase } from "./supabase";
 
+const money = (value) => `Rs. ${Number(value || 0).toLocaleString("en-PK")}`;
+const number = (value) => Number(value || 0).toLocaleString("en-PK");
+
 export default function Home() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  const [dashboardData, setDashboardData] = useState(null);
+  const [metrics, setMetrics] = useState(null);
   const [dataLoading, setDataLoading] = useState(false);
-  const [dataError, setDataError] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data, error }) => {
-      if (error) {
-        console.error("Session error:", error);
-      }
-
-      setSession(data.session);
-      setLoading(false);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setLoading(false);
-    });
-
+    supabase.auth.getSession().then(({ data }) => { setSession(data.session); setLoading(false); });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, next) => { setSession(next); setLoading(false); });
     return () => subscription.unsubscribe();
   }, []);
 
-  async function loadDashboardData() {
-    setDataLoading(true);
-    setDataError("");
-
+  async function loadMetrics() {
+    setDataLoading(true); setError("");
     try {
-      const { data, error } = await supabase
-        .rpc("get_dashboard_metrics")
-        .single();
-
-      if (error) throw error;
-
-      const [purchasesResult, supplierPaymentsResult, salesResult, customerPaymentsResult, stockReturnsResult] = await Promise.all([
+      const { data, error: metricError } = await supabase.rpc("get_dashboard_metrics").single();
+      if (metricError) throw metricError;
+      const [purchaseRows, supplierPayments, saleRows, customerPayments, returnRows] = await Promise.all([
         supabase.from("purchases").select("supplier_id,total_amount,paid_amount"),
         supabase.from("supplier_payments").select("supplier_id,amount"),
         supabase.from("sales").select("customer_id,total_amount,received_amount"),
         supabase.from("customer_payments").select("customer_id,amount"),
         supabase.from("stock_returns").select("customer_id,return_amount"),
       ]);
-      if (purchasesResult.error || supplierPaymentsResult.error || salesResult.error || customerPaymentsResult.error || stockReturnsResult.error) {
-        throw purchasesResult.error || supplierPaymentsResult.error || salesResult.error || customerPaymentsResult.error || stockReturnsResult.error;
-      }
-      const netOutstanding = (invoices, payments, partyKey, settledKey) => {
-        const balances = new Map();
-        invoices.forEach((row) => balances.set(row[partyKey], (balances.get(row[partyKey]) || 0) + Number(row.total_amount || 0) - Number(row[settledKey] || 0)));
-        payments.forEach((row) => balances.set(row[partyKey], (balances.get(row[partyKey]) || 0) - Number(row.amount || 0)));
-        return [...balances.values()].reduce((sum, balance) => sum + Math.max(balance, 0), 0);
+      const queryError = [purchaseRows, supplierPayments, saleRows, customerPayments, returnRows].find((row) => row.error)?.error;
+      if (queryError) throw queryError;
+      const returnsByCustomer = new Map();
+      (returnRows.data || []).forEach((row) => returnsByCustomer.set(row.customer_id, (returnsByCustomer.get(row.customer_id) || 0) + Number(row.return_amount || 0)));
+      const balance = (invoices, payments, partyKey, paidKey, adjustments = new Map()) => {
+        const values = new Map();
+        invoices.forEach((row) => values.set(row[partyKey], (values.get(row[partyKey]) || 0) + Number(row.total_amount || 0) - Number(row[paidKey] || 0)));
+        payments.forEach((row) => values.set(row[partyKey], (values.get(row[partyKey]) || 0) - Number(row.amount || 0)));
+        adjustments.forEach((amount, id) => values.set(id, (values.get(id) || 0) - amount));
+        return [...values.values()].reduce((sum, value) => sum + Math.max(value, 0), 0);
       };
-      const payables = netOutstanding(purchasesResult.data || [], supplierPaymentsResult.data || [], "supplier_id", "paid_amount");
-      const customerReturns = new Map();
-      (stockReturnsResult.data || []).forEach((row) => customerReturns.set(row.customer_id, (customerReturns.get(row.customer_id) || 0) + Number(row.return_amount || 0)));
-      const receivables = [...new Map((salesResult.data || []).map((row) => [row.customer_id, 0])).keys()].reduce((total, customerId) => {
-        const sales = (salesResult.data || []).filter((row) => row.customer_id === customerId).reduce((sum, row) => sum + Number(row.total_amount || 0) - Number(row.received_amount || 0), 0);
-        const payments = (customerPaymentsResult.data || []).filter((row) => row.customer_id === customerId).reduce((sum, row) => sum + Number(row.amount || 0), 0);
-        return total + Math.max(sales - payments - Number(customerReturns.get(customerId) || 0), 0);
-      }, 0);
-
-      setDashboardData({
-        products: Number(data?.products || 0),
-        stock: Number(data?.stock || 0),
-        customers: Number(data?.customers || 0),
-        suppliers: Number(data?.suppliers || 0),
-        sales: Math.max(0, Number(data?.sales || 0) - (stockReturnsResult.data || []).reduce((sum, row) => sum + Number(row.return_amount || 0), 0)),
-        purchases: Number(data?.purchases || 0),
-        receivables,
-        payables,
-      });
-    } catch (error) {
-      console.error("Dashboard data error:", error);
-      setDataError(
-        "Dashboard data load nahi ho saka. Please try again."
-      );
-    } finally {
-      setDataLoading(false);
-    }
+      const returned = [...returnsByCustomer.values()].reduce((sum, value) => sum + value, 0);
+      setMetrics({ products:Number(data?.products||0), stock:Number(data?.stock||0), customers:Number(data?.customers||0), suppliers:Number(data?.suppliers||0), sales:Math.max(0,Number(data?.sales||0)-returned), purchases:Number(data?.purchases||0), receivables:balance(saleRows.data||[],customerPayments.data||[],"customer_id","received_amount",returnsByCustomer), payables:balance(purchaseRows.data||[],supplierPayments.data||[],"supplier_id","paid_amount") });
+    } catch (loadError) { console.error(loadError); setError("Dashboard data load nahi ho saka. Please try again."); }
+    finally { setDataLoading(false); }
   }
-
-  useEffect(() => {
-    if (session) {
-      loadDashboardData();
-    } else {
-      setDashboardData(null);
-      setDataError("");
-    }
-  }, [session]);
-
-  if (loading) {
-    return (
-      <main
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          fontFamily: "Arial, sans-serif",
-        }}
-      >
-        Loading...
-      </main>
-    );
-  }
-
-  if (!session) {
-    return <Login />;
-  }
-
-  const formatNumber = (value) => {
-    return Number(value || 0).toLocaleString("en-PK");
-  };
-
-  const formatCurrency = (value) => {
-    return "Rs. " + Number(value || 0).toLocaleString("en-PK");
-  };
+  useEffect(() => { if (session) loadMetrics(); else { setMetrics(null); setError(""); } }, [session]);
+  if (loading) return <main style={s.loading}>Loading Al Wahab ERP...</main>;
+  if (!session) return <Login />;
 
   const cards = [
-    {
-      title: "Products",
-      value: dataLoading
-        ? "..."
-        : formatNumber(dashboardData?.products),
-      icon: "💊",
-      link: "/products",
-    },
-    {
-      title: "Current Stock",
-      value: dataLoading ? "..." : formatNumber(dashboardData?.stock),
-      icon: "📦",
-      link: "/stock",
-    },
-    {
-      title: "Customers",
-      value: dataLoading
-        ? "..."
-        : formatNumber(dashboardData?.customers),
-      icon: "🏥",
-      link: "/customers",
-    },
-    {
-      title: "Suppliers",
-      value: dataLoading
-        ? "..."
-        : formatNumber(dashboardData?.suppliers),
-      icon: "🏭",
-      link: "/companies",
-    },
-    {
-      title: "Sales",
-      value: dataLoading ? "..." : formatCurrency(dashboardData?.sales),
-      icon: "🧾",
-      link: "/sales",
-    },
-    {
-      title: "Purchases",
-      value: dataLoading
-        ? "..."
-        : formatCurrency(dashboardData?.purchases),
-      icon: "🛒",
-      link: "/purchases",
-    },
-    {
-      title: "Receivables",
-      value: dataLoading
-        ? "..."
-        : formatCurrency(dashboardData?.receivables),
-      icon: "💰",
-      link: "/receivables",
-    },
-    {
-      title: "Payables",
-      value: dataLoading
-        ? "..."
-        : formatCurrency(dashboardData?.payables),
-      icon: "💸",
-      link: "/payables",
-    },
+    ["Products", number(metrics?.products), "💊", "/products", "Product master", "#2563eb"],
+    ["Available Stock", number(metrics?.stock), "📦", "/stock", "Current sellable qty", "#7c3aed"],
+    ["Customers", number(metrics?.customers), "🏥", "/customers", "Active parties", "#0f766e"],
+    ["Suppliers", number(metrics?.suppliers), "🏭", "/companies", "Purchase sources", "#ea580c"],
+    ["Net Sales", money(metrics?.sales), "🧾", "/sales/invoices", "After stock returns", "#16a34a"],
+    ["Purchases", money(metrics?.purchases), "🛒", "/purchases/invoices", "Purchase register", "#9333ea"],
+    ["Receivables", money(metrics?.receivables), "💰", "/receivables", "Customer outstanding", "#d97706"],
+    ["Payables", money(metrics?.payables), "💸", "/payables", "Supplier outstanding", "#e11d48"],
   ];
-
-  const sidebarItems = [
-    { label: "💊 Products", link: "/products" },
-    { label: "📦 Stock", link: "/stock" },
-    { label: "↩️ Stock Returns", link: "/stock-returns" },
-    { label: "🏥 Customers", link: "/customers" },
-    { label: "🏭 Suppliers", link: "/companies" },
-    { label: "🧾 Sales", link: "/sales" },
-    { label: "📒 Commission Ledger", link: "/commission-ledger" },
-    { label: "🛒 Purchases", link: "/purchases" },
-    { label: "💰 Accounts", link: "/accounts" },
-    { label: "📈 Reports", link: "/reports" },
-    { label: "👥 Users", link: "/users" },
-    { label: "⚙️ Settings", link: "/settings" },
+  const groups = [
+    ["OPERATIONS", [["💊","Products","/products"],["📦","Stock","/stock"],["↩️","Customer Returns","/stock-returns"],["↪️","Supplier Returns","/supplier-stock-returns"]]],
+    ["SALES & PURCHASE", [["🧾","New Sale","/sales"],["📋","Sales Register","/sales/invoices"],["📊","Sales Summary","/sales/summary"],["🛒","Purchases","/purchases"],["🏥","Customers","/customers"],["🏭","Suppliers","/companies"]]],
+    ["ACCOUNTS", [["💼","Accounts Centre","/accounts"],["📗","Customer Ledger","/customer-ledger"],["📘","Supplier Ledger","/supplier-ledger"],["💰","Receivables","/receivables"],["💸","Payables","/payables"],["📒","Commission Ledger","/commission-ledger"]]],
+    ["SYSTEM", [["📈","Reports","/reports"],["👥","Users","/users"],["⚙️","Settings","/settings"]]],
   ];
+  const actions = [["+ New Sale","/sales","primary"],["+ New Purchase","/purchases","primary"],["+ Add Customer","/customers","plain"],["+ Add Product","/products","plain"],["Customer Ledger","/customer-ledger","plain"],["Supplier Ledger","/supplier-ledger","plain"]];
 
-  const quickActions = [
-    { label: "Add Product", link: "/products" },
-    { label: "Add Customer", link: "/customers" },
-    { label: "Add Supplier", link: "/companies" },
-    { label: "New Sale", link: "/sales" },
-    { label: "Commission Ledger", link: "/commission-ledger" },
-    { label: "New Purchase", link: "/purchases" },
-  ];
-
-  return (
-    <main
-      style={{
-        minHeight: "100vh",
-        background: "#f3f4f6",
-        fontFamily: "Arial, sans-serif",
-      }}
-    >
-      <header
-        style={{
-          background: "#111827",
-          color: "#fff",
-          padding: "18px 24px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: "15px",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <img src="/images/al-wahab-logo-transparent.png" alt="Al Wahab Enterprises" style={{ width: "48px", height: "48px", objectFit: "contain" }} />
-          <div><h1 style={{ margin: 0, fontSize: "22px" }}>
-            Al Wahab Enterprises
-          </h1>
-
-          <p
-            style={{
-              margin: "5px 0 0",
-              color: "#d1d5db",
-              fontSize: "13px",
-            }}
-          >
-            Pharmaceutical Distribution Management System
-          </p></div>
-        </div>
-
-        <button
-          onClick={async () => {
-            await supabase.auth.signOut();
-          }}
-          style={{
-            padding: "10px 16px",
-            background: "#fff",
-            color: "#111827",
-            border: "none",
-            borderRadius: "7px",
-            cursor: "pointer",
-            fontWeight: "bold",
-          }}
-        >
-          Logout
-        </button>
-      </header>
-
-      <div
-        style={{
-          display: "flex",
-          minHeight: "calc(100vh - 80px)",
-        }}
-      >
-        <aside
-          style={{
-            width: "220px",
-            background: "#1f2937",
-            color: "#fff",
-            padding: "20px 12px",
-            boxSizing: "border-box",
-          }}
-        >
-          <div
-            style={{
-              padding: "12px",
-              marginBottom: "10px",
-              background: "#374151",
-              borderRadius: "8px",
-              fontWeight: "bold",
-            }}
-          >
-            📊 Dashboard
-          </div>
-
-          {sidebarItems.map((item) => (
-            <a
-              key={item.label}
-              href={item.link}
-              style={{
-                display: "block",
-                padding: "12px",
-                marginBottom: "4px",
-                borderRadius: "7px",
-                color: "#d1d5db",
-                cursor: item.link === "#" ? "default" : "pointer",
-                textDecoration: "none",
-              }}
-              onClick={(e) => {
-                if (item.link === "#") {
-                  e.preventDefault();
-                }
-              }}
-            >
-              {item.label}
-            </a>
-          ))}
-        </aside>
-
-        <section
-          style={{
-            flex: 1,
-            padding: "25px",
-            boxSizing: "border-box",
-          }}
-        >
-          <div style={{ marginBottom: "25px" }}>
-            <h2
-              style={{
-                margin: 0,
-                color: "#111827",
-              }}
-            >
-              Dashboard
-            </h2>
-
-            <p
-              style={{
-                marginTop: "7px",
-                color: "#6b7280",
-              }}
-            >
-              Welcome to Al Wahab Enterprises ERP.
-            </p>
-          </div>
-
-          {dataError && (
-            <div
-              style={{
-                marginBottom: "20px",
-                padding: "12px 15px",
-                background: "#fee2e2",
-                color: "#991b1b",
-                borderRadius: "8px",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: "12px",
-              }}
-            >
-              <span>{dataError}</span>
-              <button
-                type="button"
-                onClick={loadDashboardData}
-                disabled={dataLoading}
-                style={{
-                  padding: "8px 12px",
-                  background: "#991b1b",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "6px",
-                  cursor: dataLoading ? "wait" : "pointer",
-                  fontWeight: "bold",
-                }}
-              >
-                Retry
-              </button>
-            </div>
-          )}
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns:
-                "repeat(auto-fit, minmax(190px, 1fr))",
-              gap: "16px",
-            }}
-          >
-            {cards.map((card) => (
-              <a
-                key={card.title}
-                href={card.link}
-                onClick={(e) => {
-                  if (card.link === "#") {
-                    e.preventDefault();
-                  }
-                }}
-                style={{
-                  display: "block",
-                  background: "#fff",
-                  padding: "20px",
-                  borderRadius: "12px",
-                  boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
-                  border: "1px solid #e5e7eb",
-                  textDecoration: "none",
-                  color: "inherit",
-                  cursor:
-                    card.link === "#" ? "default" : "pointer",
-                }}
-              >
-                <div style={{ fontSize: "28px" }}>
-                  {card.icon}
-                </div>
-
-                <p
-                  style={{
-                    margin: "12px 0 5px",
-                    color: "#6b7280",
-                    fontSize: "14px",
-                  }}
-                >
-                  {card.title}
-                </p>
-
-                <h3
-                  style={{
-                    margin: 0,
-                    fontSize: "22px",
-                    color: "#111827",
-                  }}
-                >
-                  {card.value}
-                </h3>
-              </a>
-            ))}
-          </div>
-
-          <div
-            style={{
-              marginTop: "25px",
-              background: "#fff",
-              padding: "22px",
-              borderRadius: "12px",
-              border: "1px solid #e5e7eb",
-            }}
-          >
-            <h3 style={{ marginTop: 0 }}>Quick Actions</h3>
-
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "10px",
-              }}
-            >
-              {quickActions.map((action) => (
-                <a
-                  key={action.label}
-                  href={action.link}
-                  onClick={(e) => {
-                    if (action.link === "#") {
-                      e.preventDefault();
-                    }
-                  }}
-                  style={{
-                    display: "inline-block",
-                    padding: "11px 15px",
-                    background: "#111827",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: "7px",
-                    cursor:
-                      action.link === "#"
-                        ? "default"
-                        : "pointer",
-                    textDecoration: "none",
-                  }}
-                >
-                  + {action.label}
-                </a>
-              ))}
-            </div>
-          </div>
-
-          <div
-            style={{
-              marginTop: "25px",
-              background: "#fff",
-              padding: "22px",
-              borderRadius: "12px",
-              border: "1px solid #e5e7eb",
-            }}
-          >
-            <h3 style={{ marginTop: 0 }}>Recent Activity</h3>
-
-            <p style={{ color: "#6b7280" }}>
-              No transactions recorded yet.
-            </p>
-          </div>
-        </section>
-      </div>
-    </main>
-  );
+  return <main style={s.page}>
+    <header style={s.topbar}><a href="/" style={s.brand}><img src="/images/al-wahab-logo-transparent.png" alt="" style={s.logo}/><span><b>Al Wahab Enterprises</b><small>Pharmaceutical Distribution ERP</small></span></a><div style={s.topActions}><span style={s.status}>● System online</span><button onClick={() => supabase.auth.signOut()} style={s.logout}>Logout</button></div></header>
+    <div style={s.shell}><aside style={s.sidebar}><a href="/" style={s.dashboardLink}>▦ <span>Dashboard</span></a>{groups.map(([title, items]) => <section key={title} style={s.navGroup}><p style={s.navTitle}>{title}</p>{items.map(([icon,label,href]) => <a key={href} href={href} style={s.navItem}><span>{icon}</span>{label}</a>)}</section>)}</aside>
+      <section style={s.content}><header style={s.pageHeader}><div><p style={s.eyebrow}>OVERVIEW</p><h1 style={s.title}>Business Dashboard</h1><p style={s.subtitle}>Sales, stock aur accounts ka live overview.</p></div><button onClick={loadMetrics} disabled={dataLoading} style={s.refresh}>{dataLoading ? "Refreshing..." : "↻ Refresh data"}</button></header>
+      {error && <div style={s.error}>{error}<button onClick={loadMetrics} style={s.retry}>Retry</button></div>}
+      <section style={s.metrics}>{cards.map(([label,value,icon,href,note,color]) => <a key={label} href={href} style={{...s.metric,borderTop:`4px solid ${color}`}}><span style={s.metricIcon}>{icon}</span><div><p>{label}</p><strong>{dataLoading ? "..." : value}</strong><small>{note} →</small></div></a>)}</section>
+      <section style={s.quickCard}><div><p style={s.eyebrow}>QUICK ACTIONS</p><h2 style={s.sectionTitle}>Daily work shortcuts</h2></div><div style={s.actionGrid}>{actions.map(([label,href,kind]) => <a key={label} href={href} style={kind==="primary"?s.actionPrimary:s.actionPlain}>{label}</a>)}</div></section>
+      <section style={s.lowerGrid}><article style={s.accountsCard}><div style={s.cardHeading}><div><p style={s.eyebrow}>ACCOUNTS CENTRE</p><h2 style={s.sectionTitle}>Ledgers & balances</h2></div><a href="/accounts" style={s.viewLink}>Open accounts →</a></div><p style={s.cardText}>Customer aur supplier ledgers alag rakhay gaye hain, jab ke Accounts Centre un dono ko ek central jagah se access deta hai.</p><div style={s.ledgerGrid}><a href="/customer-ledger" style={s.ledgerLink}>📗 <span><b>Customer Ledger</b><small>Invoices, returns & receipts</small></span></a><a href="/supplier-ledger" style={s.ledgerLink}>📘 <span><b>Supplier Ledger</b><small>Purchases & payments</small></span></a><a href="/receivables" style={s.ledgerLink}>💰 <span><b>Receivables</b><small>{money(metrics?.receivables)} outstanding</small></span></a><a href="/payables" style={s.ledgerLink}>💸 <span><b>Payables</b><small>{money(metrics?.payables)} outstanding</small></span></a></div></article>
+      <article style={s.reportCard}><p style={s.eyebrow}>REPORTING</p><h2 style={s.sectionTitle}>Analysis & reports</h2><p style={s.cardText}>Supplier-wise cost, product-wise sales aur party balances analyse karein.</p><div style={s.reportLinks}><a href="/sales/summary">Sales Summary <span>→</span></a><a href="/reports">Business Reports <span>→</span></a><a href="/stock">Stock Management <span>→</span></a><a href="/commission-ledger">Commission Ledger <span>→</span></a></div></article></section>
+      </section></div>
+  </main>;
 }
+
+const s={page:{minHeight:"100vh",background:"#f5f7fb",fontFamily:"Arial,Helvetica,sans-serif",color:"#172033"},loading:{minHeight:"100vh",display:"grid",placeItems:"center",fontFamily:"Arial,Helvetica,sans-serif",color:"#344054"},topbar:{minHeight:76,boxSizing:"border-box",padding:"12px 28px",background:"#101828",display:"flex",justifyContent:"space-between",alignItems:"center",gap:16,color:"#fff"},brand:{display:"flex",alignItems:"center",gap:12,color:"#fff",textDecoration:"none"},logo:{width:45,height:45,objectFit:"contain"},topActions:{display:"flex",alignItems:"center",gap:14},status:{fontSize:13,color:"#6ce9a6"},logout:{border:0,background:"#fff",color:"#101828",fontWeight:700,borderRadius:8,padding:"10px 15px",cursor:"pointer"},shell:{display:"flex",minHeight:"calc(100vh - 76px)"},sidebar:{width:245,boxSizing:"border-box",padding:"18px 14px",background:"#1d2939",color:"#fff",flexShrink:0},dashboardLink:{display:"flex",gap:10,alignItems:"center",padding:"12px 14px",borderRadius:9,background:"#344054",color:"#fff",textDecoration:"none",fontWeight:800,marginBottom:16},navGroup:{borderTop:"1px solid #344054",paddingTop:14,marginTop:14},navTitle:{margin:"0 0 6px",padding:"0 10px",fontSize:10,letterSpacing:".12em",fontWeight:800,color:"#98a2b3"},navItem:{display:"flex",gap:10,alignItems:"center",padding:"9px 10px",borderRadius:7,textDecoration:"none",color:"#d0d5dd",fontSize:14},content:{flex:1,minWidth:0,padding:"30px",boxSizing:"border-box"},pageHeader:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16,marginBottom:24,flexWrap:"wrap"},eyebrow:{margin:"0 0 5px",fontSize:11,fontWeight:800,letterSpacing:".11em",color:"#667085"},title:{margin:0,fontSize:30,lineHeight:1.15},subtitle:{margin:"7px 0 0",color:"#667085"},refresh:{border:"1px solid #d0d5dd",background:"#fff",borderRadius:8,padding:"10px 13px",fontWeight:700,cursor:"pointer",color:"#344054"},error:{marginBottom:18,padding:14,borderRadius:10,background:"#fee4e2",color:"#b42318",fontWeight:600},retry:{marginLeft:12,border:0,borderRadius:6,padding:"6px 10px",background:"#b42318",color:"#fff",fontWeight:700},metrics:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(205px,1fr))",gap:15},metric:{display:"flex",gap:14,alignItems:"flex-start",minHeight:118,boxSizing:"border-box",padding:18,background:"#fff",border:"1px solid #eaecf0",borderRadius:13,boxShadow:"0 2px 8px rgba(16,24,40,.04)",textDecoration:"none",color:"#172033"},metricIcon:{display:"grid",placeItems:"center",width:40,height:40,borderRadius:10,background:"#f2f4f7",fontSize:22,flexShrink:0},quickCard:{marginTop:22,background:"#fff",border:"1px solid #eaecf0",borderRadius:14,padding:22,display:"flex",justifyContent:"space-between",gap:18,alignItems:"center",flexWrap:"wrap"},sectionTitle:{margin:0,fontSize:19},actionGrid:{display:"flex",gap:9,flexWrap:"wrap"},actionPrimary:{background:"#155eef",color:"#fff",padding:"11px 14px",borderRadius:8,textDecoration:"none",fontWeight:700,fontSize:14},actionPlain:{background:"#f2f4f7",color:"#344054",padding:"11px 14px",borderRadius:8,textDecoration:"none",fontWeight:700,fontSize:14},lowerGrid:{display:"grid",gridTemplateColumns:"minmax(0,1.5fr) minmax(280px,.8fr)",gap:20,marginTop:22},accountsCard:{background:"#fff",border:"1px solid #eaecf0",borderRadius:14,padding:22},reportCard:{background:"linear-gradient(135deg,#eff8ff,#f5f3ff)",border:"1px solid #dbeafe",borderRadius:14,padding:22},cardHeading:{display:"flex",justifyContent:"space-between",gap:12,alignItems:"flex-start"},viewLink:{color:"#155eef",fontSize:13,fontWeight:700,textDecoration:"none"},cardText:{margin:"12px 0 18px",color:"#667085",fontSize:14,lineHeight:1.5},ledgerGrid:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))",gap:10},ledgerLink:{display:"flex",gap:11,alignItems:"center",padding:13,background:"#f8fafc",border:"1px solid #eaecf0",borderRadius:10,textDecoration:"none",color:"#172033"},reportLinks:{display:"grid",gap:8},reportLinks:{display:"grid",gap:8},};
