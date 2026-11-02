@@ -13,32 +13,34 @@ export default function ReceivablesPage() {
   async function loadReceivables() {
     setLoading(true);
     setError("");
-    const [salesResult, customersResult] = await Promise.all([
+    const [salesResult, customersResult, returnsResult] = await Promise.all([
       supabase
         .from("sales")
         .select("id, customer_id, invoice_no, invoice_date, total_amount, received_amount")
         .order("invoice_date", { ascending: false }),
       supabase.from("customers").select("id, name"),
+      supabase.from("stock_returns").select("sale_id,return_amount"),
     ]);
 
-    if (salesResult.error || customersResult.error) {
-      setError(`Receivables load nahi ho sake: ${(salesResult.error || customersResult.error).message}`);
+    if (salesResult.error || customersResult.error || returnsResult.error) {
+      setError(`Receivables load nahi ho sake: ${(salesResult.error || customersResult.error || returnsResult.error).message}`);
     } else {
       const customerNames = new Map((customersResult.data || []).map((customer) => [customer.id, customer.name]));
+      const returnsBySale = (returnsResult.data || []).reduce((map, row) => { map.set(row.sale_id, (map.get(row.sale_id) || 0) + Number(row.return_amount || 0)); return map; }, new Map());
       setRows((salesResult.data || [])
-        .filter((sale) => Number(sale.total_amount || 0) > Number(sale.received_amount || 0))
-        .map((sale) => ({ ...sale, customer_name: customerNames.get(sale.customer_id) || "—" })));
+        .map((sale) => ({ ...sale, return_amount: Number(returnsBySale.get(sale.id) || 0), customer_name: customerNames.get(sale.customer_id) || "—" }))
+        .filter((sale) => Number(sale.total_amount || 0) - Number(sale.received_amount || 0) - Number(sale.return_amount || 0) > 0));
     }
     setLoading(false);
   }
 
   useEffect(() => { loadReceivables(); }, []);
-  const total = rows.reduce((sum, row) => sum + Number(row.total_amount || 0) - Number(row.received_amount || 0), 0);
+  const total = rows.reduce((sum, row) => sum + Number(row.total_amount || 0) - Number(row.received_amount || 0) - Number(row.return_amount || 0), 0);
 
   return <main style={styles.page}><a href="/" style={styles.back}>← Dashboard</a><h1 style={styles.title}>Receivables</h1><p style={styles.sub}>Customers se receive hone wali outstanding amount.</p><a href="/customer-ledger" style={styles.ledger}>Open Customer Ledger / Record Receipt</a>
     <section style={styles.card}><div style={styles.totalLabel}>Total Receivable</div><strong style={styles.total}>{money(total)}</strong></section>
     {error && <div style={styles.error}>{error}<button onClick={loadReceivables} style={styles.retry}>Retry</button></div>}
-      <section style={styles.card}><h2 style={styles.heading}>Outstanding Sales Invoices</h2>{loading ? <p>Loading...</p> : rows.length === 0 ? <p style={styles.muted}>Koi outstanding sale invoice nahi hai.</p> : <div style={styles.tableWrap}><table style={styles.table}><thead><tr><th style={styles.th}>Date</th><th style={styles.th}>Invoice</th><th style={styles.th}>Customer</th><th style={styles.th}>Sale</th><th style={styles.th}>Received</th><th style={styles.th}>Balance</th></tr></thead><tbody>{rows.map((row) => { const balance = Number(row.total_amount || 0) - Number(row.received_amount || 0); return <tr key={row.id}><td style={styles.td}>{row.invoice_date}</td><td style={styles.td}>{row.invoice_no}</td><td style={styles.td}>{row.customer_name}</td><td style={styles.td}>{money(row.total_amount)}</td><td style={styles.td}>{money(row.received_amount)}</td><td style={{...styles.td, fontWeight: 700, color: "#b45309"}}>{money(balance)}</td></tr>; })}</tbody></table></div>}</section>
+      <section style={styles.card}><h2 style={styles.heading}>Outstanding Sales Invoices</h2>{loading ? <p>Loading...</p> : rows.length === 0 ? <p style={styles.muted}>Koi outstanding sale invoice nahi hai.</p> : <div style={styles.tableWrap}><table style={styles.table}><thead><tr><th style={styles.th}>Date</th><th style={styles.th}>Invoice</th><th style={styles.th}>Customer</th><th style={styles.th}>Sale</th><th style={styles.th}>Return</th><th style={styles.th}>Received</th><th style={styles.th}>Balance</th></tr></thead><tbody>{rows.map((row) => { const balance = Number(row.total_amount || 0) - Number(row.received_amount || 0) - Number(row.return_amount || 0); return <tr key={row.id}><td style={styles.td}>{row.invoice_date}</td><td style={styles.td}>{row.invoice_no}</td><td style={styles.td}>{row.customer_name}</td><td style={styles.td}>{money(row.total_amount)}</td><td style={styles.td}>{money(row.return_amount)}</td><td style={styles.td}>{money(row.received_amount)}</td><td style={{...styles.td, fontWeight: 700, color: "#b45309"}}>{money(balance)}</td></tr>; })}</tbody></table></div>}</section>
   </main>;
 }
 

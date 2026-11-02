@@ -43,14 +43,15 @@ export default function Home() {
 
       if (error) throw error;
 
-      const [purchasesResult, supplierPaymentsResult, salesResult, customerPaymentsResult] = await Promise.all([
+      const [purchasesResult, supplierPaymentsResult, salesResult, customerPaymentsResult, stockReturnsResult] = await Promise.all([
         supabase.from("purchases").select("supplier_id,total_amount,paid_amount"),
         supabase.from("supplier_payments").select("supplier_id,amount"),
         supabase.from("sales").select("customer_id,total_amount,received_amount"),
         supabase.from("customer_payments").select("customer_id,amount"),
+        supabase.from("stock_returns").select("customer_id,return_amount"),
       ]);
-      if (purchasesResult.error || supplierPaymentsResult.error || salesResult.error || customerPaymentsResult.error) {
-        throw purchasesResult.error || supplierPaymentsResult.error || salesResult.error || customerPaymentsResult.error;
+      if (purchasesResult.error || supplierPaymentsResult.error || salesResult.error || customerPaymentsResult.error || stockReturnsResult.error) {
+        throw purchasesResult.error || supplierPaymentsResult.error || salesResult.error || customerPaymentsResult.error || stockReturnsResult.error;
       }
       const netOutstanding = (invoices, payments, partyKey, settledKey) => {
         const balances = new Map();
@@ -59,14 +60,20 @@ export default function Home() {
         return [...balances.values()].reduce((sum, balance) => sum + Math.max(balance, 0), 0);
       };
       const payables = netOutstanding(purchasesResult.data || [], supplierPaymentsResult.data || [], "supplier_id", "paid_amount");
-      const receivables = netOutstanding(salesResult.data || [], customerPaymentsResult.data || [], "customer_id", "received_amount");
+      const customerReturns = new Map();
+      (stockReturnsResult.data || []).forEach((row) => customerReturns.set(row.customer_id, (customerReturns.get(row.customer_id) || 0) + Number(row.return_amount || 0)));
+      const receivables = [...new Map((salesResult.data || []).map((row) => [row.customer_id, 0])).keys()].reduce((total, customerId) => {
+        const sales = (salesResult.data || []).filter((row) => row.customer_id === customerId).reduce((sum, row) => sum + Number(row.total_amount || 0) - Number(row.received_amount || 0), 0);
+        const payments = (customerPaymentsResult.data || []).filter((row) => row.customer_id === customerId).reduce((sum, row) => sum + Number(row.amount || 0), 0);
+        return total + Math.max(sales - payments - Number(customerReturns.get(customerId) || 0), 0);
+      }, 0);
 
       setDashboardData({
         products: Number(data?.products || 0),
         stock: Number(data?.stock || 0),
         customers: Number(data?.customers || 0),
         suppliers: Number(data?.suppliers || 0),
-        sales: Number(data?.sales || 0),
+        sales: Math.max(0, Number(data?.sales || 0) - (stockReturnsResult.data || []).reduce((sum, row) => sum + Number(row.return_amount || 0), 0)),
         purchases: Number(data?.purchases || 0),
         receivables,
         payables,

@@ -33,7 +33,7 @@ export default function SalesSummaryPage() {
   async function load() {
     setLoading(true);
     setError("");
-    const [salesResult, itemsResult, productsResult, customersResult, batchesResult, suppliersResult, purchaseItemsResult, purchasesResult] = await Promise.all([
+    const [salesResult, itemsResult, productsResult, customersResult, batchesResult, suppliersResult, purchaseItemsResult, purchasesResult, returnsResult] = await Promise.all([
       supabase.from("sales").select("id,invoice_no,invoice_date,customer_id").order("invoice_date", { ascending: false }).order("created_at", { ascending: false }),
       supabase.from("sale_items").select("id,sale_id,product_id,batch_id,product_name_snapshot,batch_no_snapshot,quantity,bonus_quantity,sale_rate,discount,amount"),
       supabase.from("products").select("id,product_name,pack_size"),
@@ -42,8 +42,9 @@ export default function SalesSummaryPage() {
       supabase.from("companies").select("id,name").in("company_type", ["supplier", "both"]).order("name"),
       supabase.from("purchase_items").select("product_id,purchase_id"),
       supabase.from("purchases").select("id,supplier_id"),
+      supabase.from("stock_returns").select("sale_item_id,quantity,return_amount"),
     ]);
-    const firstError = [salesResult, itemsResult, productsResult, customersResult, batchesResult, suppliersResult, purchaseItemsResult, purchasesResult].find((result) => result.error)?.error;
+    const firstError = [salesResult, itemsResult, productsResult, customersResult, batchesResult, suppliersResult, purchaseItemsResult, purchasesResult, returnsResult].find((result) => result.error)?.error;
     if (firstError) { setError(firstError.message); setLoading(false); return; }
 
     const salesById = Object.fromEntries((salesResult.data || []).map((sale) => [sale.id, sale]));
@@ -58,10 +59,17 @@ export default function SalesSummaryPage() {
       return map;
     }, {});
 
+    const returnsByItem = (returnsResult.data || []).reduce((map, row) => {
+      if (!row.sale_item_id) return map;
+      const current = map.get(row.sale_item_id) || { quantity: 0, amount: 0 };
+      map.set(row.sale_item_id, { quantity: current.quantity + Number(row.quantity || 0), amount: current.amount + Number(row.return_amount || 0) });
+      return map;
+    }, new Map());
     setRows((itemsResult.data || []).map((item) => {
       const sale = salesById[item.sale_id] || {};
       const product = productsById[item.product_id] || {};
       const supplierNames = [...(suppliersByProduct[item.product_id] || [])].map((id) => suppliersById[id]).filter(Boolean);
+      const returned = returnsByItem.get(item.id) || { quantity: 0, amount: 0 };
       return {
         id: item.id, date: sale.invoice_date, invoiceNo: sale.invoice_no || "-",
         customer: customersById[sale.customer_id] || "Customer",
@@ -69,7 +77,7 @@ export default function SalesSummaryPage() {
         pack: product.pack_size || "", batch: item.batch_no_snapshot || batchesById[item.batch_id] || "-",
         supplier: supplierNames.join(", ") || "-", quantity: Number(item.quantity || 0),
         bonus: Number(item.bonus_quantity || 0), rate: Number(item.sale_rate || 0),
-        discount: Number(item.discount || 0), amount: Number(item.amount || 0),
+        discount: Number(item.discount || 0), amount: Number(item.amount || 0), returnQuantity: returned.quantity, returnAmount: returned.amount,
       };
     }));
     setLoading(false);
@@ -94,7 +102,7 @@ export default function SalesSummaryPage() {
     batch: [...new Set(rows.map((row) => row.batch).filter((batch) => batch && batch !== "-"))].sort(),
   };
 
-  const totals = filteredRows.reduce((sum, row) => ({ quantity: sum.quantity + row.quantity, bonus: sum.bonus + row.bonus, amount: sum.amount + row.amount }), { quantity: 0, bonus: 0, amount: 0 });
+  const totals = filteredRows.reduce((sum, row) => ({ quantity: sum.quantity + row.quantity - row.returnQuantity, bonus: sum.bonus + row.bonus, amount: sum.amount + row.amount - row.returnAmount, returns: sum.returns + row.returnAmount }), { quantity: 0, bonus: 0, amount: 0, returns: 0 });
 
   async function downloadPdf() {
     const target = document.querySelector(".summaryPdf");
@@ -162,8 +170,8 @@ export default function SalesSummaryPage() {
         <SearchDropdown label="Batch" value={batchSearch} onChange={setBatchSearch} options={dropdownOptions.batch} placeholder="Search batch number" />
         <label style={s.label}>From Date<input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} /></label>
         <label style={s.label}>To Date<input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} /></label>
-      </div><div style={s.summary}><div><span>Sale Lines</span><strong>{filteredRows.length}</strong></div><div><span>Total Qty</span><strong>{totals.quantity.toLocaleString()}</strong></div><div><span>Bonus</span><strong>{totals.bonus.toLocaleString()}</strong></div><div><span>Sale Amount</span><strong>{money(totals.amount)}</strong></div></div></section>
-      <section className="summaryPdf" style={s.card}><div style={s.pdfTitle}><div style={s.brand}><img src="/images/al-wahab-logo-transparent.png" alt="" style={s.logo}/><div style={s.brandText}><strong>Al Wahab Enterprises</strong><small>Pharmaceutical Distribution</small></div></div><div style={s.reportTitle}><strong>SALES SUMMARY</strong><small>{fromDate || toDate ? (fromDate || "Start") + " to " + (toDate || "Today") : "All sales records"}</small></div></div>{loading ? <p>Loading sale summary...</p> : !filteredRows.length ? <p style={s.muted}>Is filter mein koi sale item nahi mila.</p> : <div className="summaryTableWrap" style={s.scroll}><table style={s.table}><thead><tr><th>Date</th><th>Invoice</th><th>Customer</th><th>Supplier</th><th>Product</th><th>Pack</th><th>Batch</th><th>Qty</th><th>Bonus</th><th>Rate</th><th>Discount</th><th>Amount</th></tr></thead><tbody>{filteredRows.map((row) => <tr key={row.id}><td>{dateText(row.date)}</td><td><strong>{row.invoiceNo}</strong></td><td>{row.customer}</td><td>{row.supplier}</td><td>{row.product}</td><td>{row.pack || "-"}</td><td>{row.batch}</td><td className="number">{row.quantity.toLocaleString()}</td><td className="number">{row.bonus.toLocaleString()}</td><td className="number">{money(row.rate)}</td><td className="number">{money(row.discount)}</td><td className="number">{money(row.amount)}</td></tr>)}</tbody></table></div>}</section>
+      </div><div style={s.summary}><div><span>Sale Lines</span><strong>{filteredRows.length}</strong></div><div><span>Net Qty</span><strong>{totals.quantity.toLocaleString()}</strong></div><div><span>Return Value</span><strong>{money(totals.returns)}</strong></div><div><span>Net Sale</span><strong>{money(totals.amount)}</strong></div></div></section>
+      <section className="summaryPdf" style={s.card}><div style={s.pdfTitle}><div style={s.brand}><img src="/images/al-wahab-logo-transparent.png" alt="" style={s.logo}/><div style={s.brandText}><strong>Al Wahab Enterprises</strong><small>Pharmaceutical Distribution</small></div></div><div style={s.reportTitle}><strong>SALES SUMMARY</strong><small>{fromDate || toDate ? (fromDate || "Start") + " to " + (toDate || "Today") : "All sales records"}</small></div></div>{loading ? <p>Loading sale summary...</p> : !filteredRows.length ? <p style={s.muted}>Is filter mein koi sale item nahi mila.</p> : <div className="summaryTableWrap" style={s.scroll}><table style={s.table}><thead><tr><th>Date</th><th>Invoice</th><th>Customer</th><th>Supplier</th><th>Product</th><th>Pack</th><th>Batch</th><th>Sold Qty</th><th>Return Qty</th><th>Net Qty</th><th>Rate</th><th>Gross</th><th>Return</th><th>Net Sale</th></tr></thead><tbody>{filteredRows.map((row) => <tr key={row.id}><td>{dateText(row.date)}</td><td><strong>{row.invoiceNo}</strong></td><td>{row.customer}</td><td>{row.supplier}</td><td>{row.product}</td><td>{row.pack || "-"}</td><td>{row.batch}</td><td className="number">{row.quantity.toLocaleString()}</td><td className="number">{row.returnQuantity.toLocaleString()}</td><td className="number">{(row.quantity-row.returnQuantity).toLocaleString()}</td><td className="number">{money(row.rate)}</td><td className="number">{money(row.amount)}</td><td className="number">{money(row.returnAmount)}</td><td className="number">{money(row.amount-row.returnAmount)}</td></tr>)}</tbody></table></div>}</section>
     </div>
   </main>;
 }
@@ -178,7 +186,7 @@ const s = {
   filters: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 14 },
   label: { display: "flex", flexDirection: "column", gap: 6, fontSize: 13, fontWeight: 700, color: "#344054" },
   summary: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 14, marginTop: 20 },
-  scroll: { overflowX: "auto" }, table: { width: "100%", minWidth: 1300, borderCollapse: "collapse" },
+  scroll: { overflowX: "auto" }, table: { width: "100%", minWidth: 1560, borderCollapse: "collapse" },
   pdfTitle: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 20, marginBottom: 18, paddingBottom: 12, borderBottom: "2px solid #0f172a", color: "#172033" },
   brand: { display: "flex", alignItems: "center", gap: 10 },
   brandText: { display: "flex", flexDirection: "column", gap: 2, fontSize: 16 },
