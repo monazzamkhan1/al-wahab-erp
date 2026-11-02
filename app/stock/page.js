@@ -163,6 +163,10 @@ export default function StockPage() {
             ↩ Stock Return
           </a>
 
+          <a href="/supplier-stock-returns" className="dashboardBtn">
+            ↪ Supplier Return
+          </a>
+
           <button className="refreshBtn" onClick={loadStock}>
             ↻ Refresh
           </button>
