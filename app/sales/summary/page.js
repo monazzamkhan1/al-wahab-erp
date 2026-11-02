@@ -101,8 +101,26 @@ export default function SalesSummaryPage() {
     if (!target || downloading) return;
     setDownloading(true);
     try {
+      const tableWrap = target.querySelector(".summaryTableWrap");
+      const original = {
+        border: target.style.border,
+        boxShadow: target.style.boxShadow,
+        borderRadius: target.style.borderRadius,
+        width: target.style.width,
+        overflow: tableWrap?.style.overflow,
+      };
+      target.style.border = "none";
+      target.style.boxShadow = "none";
+      target.style.borderRadius = "0";
+      target.style.width = "1450px";
+      if (tableWrap) tableWrap.style.overflow = "visible";
       const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import("html2canvas"), import("jspdf")]);
       const canvas = await html2canvas(target, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+      target.style.border = original.border;
+      target.style.boxShadow = original.boxShadow;
+      target.style.borderRadius = original.borderRadius;
+      target.style.width = original.width;
+      if (tableWrap) tableWrap.style.overflow = original.overflow;
       const pdf = new jsPDF("l", "mm", "a4");
       const margin = 8;
       const pageWidth = 297 - (margin * 2);
@@ -119,6 +137,15 @@ export default function SalesSummaryPage() {
     } catch (downloadError) {
       setError("PDF download nahi ho saki: " + downloadError.message);
     } finally {
+      const target = document.querySelector(".summaryPdf");
+      if (target) {
+        target.style.border = "";
+        target.style.boxShadow = "";
+        target.style.borderRadius = "";
+        target.style.width = "";
+        const tableWrap = target.querySelector(".summaryTableWrap");
+        if (tableWrap) tableWrap.style.overflow = "";
+      }
       setDownloading(false);
     }
   }
@@ -136,7 +163,7 @@ export default function SalesSummaryPage() {
         <label style={s.label}>From Date<input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} /></label>
         <label style={s.label}>To Date<input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} /></label>
       </div><div style={s.summary}><div><span>Sale Lines</span><strong>{filteredRows.length}</strong></div><div><span>Total Qty</span><strong>{totals.quantity.toLocaleString()}</strong></div><div><span>Bonus</span><strong>{totals.bonus.toLocaleString()}</strong></div><div><span>Sale Amount</span><strong>{money(totals.amount)}</strong></div></div></section>
-      <section className="summaryPdf" style={s.card}><div style={s.pdfTitle}><img src="/images/al-wahab-logo-transparent.png" alt="" style={s.logo}/><div><strong>Al Wahab Enterprises</strong><small>Sales Summary{fromDate || toDate ? " · " + (fromDate || "Start") + " to " + (toDate || "Today") : ""}</small></div></div>{loading ? <p>Loading sale summary...</p> : !filteredRows.length ? <p style={s.muted}>Is filter mein koi sale item nahi mila.</p> : <div style={s.scroll}><table style={s.table}><thead><tr><th>Date</th><th>Invoice</th><th>Customer</th><th>Supplier</th><th>Product</th><th>Pack</th><th>Batch</th><th>Qty</th><th>Bonus</th><th>Rate</th><th>Discount</th><th>Amount</th></tr></thead><tbody>{filteredRows.map((row) => <tr key={row.id}><td>{dateText(row.date)}</td><td><strong>{row.invoiceNo}</strong></td><td>{row.customer}</td><td>{row.supplier}</td><td>{row.product}</td><td>{row.pack || "-"}</td><td>{row.batch}</td><td className="number">{row.quantity.toLocaleString()}</td><td className="number">{row.bonus.toLocaleString()}</td><td className="number">{money(row.rate)}</td><td className="number">{money(row.discount)}</td><td className="number">{money(row.amount)}</td></tr>)}</tbody></table></div>}</section>
+      <section className="summaryPdf" style={s.card}><div style={s.pdfTitle}><div style={s.brand}><img src="/images/al-wahab-logo-transparent.png" alt="" style={s.logo}/><div style={s.brandText}><strong>Al Wahab Enterprises</strong><small>Pharmaceutical Distribution</small></div></div><div style={s.reportTitle}><strong>SALES SUMMARY</strong><small>{fromDate || toDate ? (fromDate || "Start") + " to " + (toDate || "Today") : "All sales records"}</small></div></div>{loading ? <p>Loading sale summary...</p> : !filteredRows.length ? <p style={s.muted}>Is filter mein koi sale item nahi mila.</p> : <div className="summaryTableWrap" style={s.scroll}><table style={s.table}><thead><tr><th>Date</th><th>Invoice</th><th>Customer</th><th>Supplier</th><th>Product</th><th>Pack</th><th>Batch</th><th>Qty</th><th>Bonus</th><th>Rate</th><th>Discount</th><th>Amount</th></tr></thead><tbody>{filteredRows.map((row) => <tr key={row.id}><td>{dateText(row.date)}</td><td><strong>{row.invoiceNo}</strong></td><td>{row.customer}</td><td>{row.supplier}</td><td>{row.product}</td><td>{row.pack || "-"}</td><td>{row.batch}</td><td className="number">{row.quantity.toLocaleString()}</td><td className="number">{row.bonus.toLocaleString()}</td><td className="number">{money(row.rate)}</td><td className="number">{money(row.discount)}</td><td className="number">{money(row.amount)}</td></tr>)}</tbody></table></div>}</section>
     </div>
   </main>;
 }
@@ -152,8 +179,11 @@ const s = {
   label: { display: "flex", flexDirection: "column", gap: 6, fontSize: 13, fontWeight: 700, color: "#344054" },
   summary: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 14, marginTop: 20 },
   scroll: { overflowX: "auto" }, table: { width: "100%", minWidth: 1300, borderCollapse: "collapse" },
-  pdfTitle: { display: "flex", alignItems: "center", gap: 10, marginBottom: 16, color: "#172033" },
-  logo: { width: 42, height: 42, objectFit: "contain" },
+  pdfTitle: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 20, marginBottom: 18, paddingBottom: 12, borderBottom: "2px solid #0f172a", color: "#172033" },
+  brand: { display: "flex", alignItems: "center", gap: 10 },
+  brandText: { display: "flex", flexDirection: "column", gap: 2, fontSize: 16 },
+  reportTitle: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, fontSize: 16, letterSpacing: ".4px" },
+  logo: { width: 46, height: 46, objectFit: "contain" },
   error: { background: "#fee2e2", color: "#991b1b", padding: 14, borderRadius: 8, marginBottom: 18 },
   retry: { marginLeft: 12, border: 0, borderRadius: 6, padding: "6px 10px", background: "#991b1b", color: "#fff" }, muted: { color: "#667085" },
 };
