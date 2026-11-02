@@ -44,14 +44,13 @@ export default function SalesPage() {
 
   async function loadInitialData() {
     setLoading(true);
-    const [customerResult, productResult, companyResult, historyResult] = await Promise.all([
+    const [customerResult, productResult, historyResult] = await Promise.all([
       supabase.from("customers").select("id, name, address, contact_person, city, commission_holder_id, commission_percent, commission_enabled_default, commission_holders(name)").order("name"),
       supabase
         .from("products")
         .select("id, product_code, product_name, generic_name, pack_size, mrp, tp_discount_percent, is_milk_formula")
         .eq("is_active", true)
         .order("product_name"),
-      supabase.from("companies").select("name").in("company_type", ["supplier", "both"]).order("name"),
       supabase.from("sales").select("booker_name,supplier_name").order("created_at", { ascending: false }).limit(200),
     ]);
 
@@ -65,7 +64,7 @@ export default function SalesPage() {
       setProducts(productResult.data || []);
       const history = historyResult.data || [];
       setBookers([...new Set(history.map((row) => row.booker_name).filter(Boolean))]);
-      setSuppliedByOptions([...new Set([...(companyResult.data || []).map((row) => row.name), ...history.map((row) => row.supplier_name).filter(Boolean)])]);
+      setSuppliedByOptions([...new Set(history.map((row) => row.supplier_name).filter(Boolean))]);
     }
     setLoading(false);
   }
@@ -330,8 +329,8 @@ export default function SalesPage() {
               <input list="sale-bookers" value={bookerName} onChange={(e) => setBookerName(e.target.value)} style={styles.input} placeholder="Type or select booker" />
               <datalist id="sale-bookers">{bookers.map((name) => <option key={name} value={name} />)}</datalist>
             </label>
-            <label style={styles.label}>Supplied By
-              <input list="sale-supplied-by" value={supplierName} onChange={(e) => setSupplierName(e.target.value)} style={styles.input} placeholder="Type or select supplier / distributor" />
+            <label style={styles.label}>Supplied / Delivered By
+              <input list="sale-supplied-by" value={supplierName} onChange={(e) => setSupplierName(e.target.value)} style={styles.input} placeholder="Delivery person or supplied-by name" />
               <datalist id="sale-supplied-by">{suppliedByOptions.map((name) => <option key={name} value={name} />)}</datalist>
             </label>
             <label style={{ ...styles.label, display: "flex", alignItems: "center", gap: "8px", paddingTop: "28px" }}>
