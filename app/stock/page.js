@@ -106,6 +106,12 @@ export default function StockPage() {
     );
   }, [productStock]);
 
+  const availableProducts = useMemo(() => {
+    return filteredProducts
+      .filter((product) => Number(productStock[product.id] || 0) > 0)
+      .sort((a, b) => Number(productStock[b.id] || 0) - Number(productStock[a.id] || 0));
+  }, [filteredProducts, productStock]);
+
   function getStockStatus(product) {
     const quantity = productStock[product.id] || 0;
     const minimum = Number(product.min_stock || 0);
@@ -167,12 +173,12 @@ export default function StockPage() {
 
       <section className="summaryGrid">
         <div className="summaryCard">
-          <div className="summaryTitle">Products</div>
-          <div className="summaryValue">{products.length}</div>
+          <div className="summaryTitle">Available Products</div>
+          <div className="summaryValue">{availableProducts.length}</div>
         </div>
 
         <div className="summaryCard">
-          <div className="summaryTitle">Total Stock</div>
+          <div className="summaryTitle">Available Stock Units</div>
           <div className="summaryValue">
             {totalStock.toLocaleString()}
           </div>
@@ -192,13 +198,13 @@ export default function StockPage() {
       <section className="panel">
         <div className="panelHeader">
           <div>
-            <h2>Current Stock</h2>
-            <p>Product-wise available quantity</p>
+            <h2>Available Stock</h2>
+            <p>Sirf woh products jin mein stock available hai</p>
           </div>
 
           <input
             type="text"
-            placeholder="Search product..."
+            placeholder="Search available product..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="searchInput"
@@ -207,8 +213,8 @@ export default function StockPage() {
 
         {loading ? (
           <div className="empty">Loading stock...</div>
-        ) : filteredProducts.length === 0 ? (
-          <div className="empty">No products found.</div>
+        ) : availableProducts.length === 0 ? (
+          <div className="empty">Is search mein koi available stock nahi mila.</div>
         ) : (
           <div className="tableWrap">
             <table>
@@ -225,7 +231,7 @@ export default function StockPage() {
               </thead>
 
               <tbody>
-                {filteredProducts.map((product) => {
+                {availableProducts.map((product) => {
                   const quantity = productStock[product.id] || 0;
                   const status = getStockStatus(product);
 
@@ -410,6 +416,7 @@ export default function StockPage() {
           padding: 30px;
           background: #f5f7fb;
           color: #1f2937;
+          font-family: Arial, Helvetica, sans-serif;
         }
 
         .topbar {
@@ -476,7 +483,7 @@ export default function StockPage() {
 
         .summaryGrid {
           display: grid;
-          grid-template-columns: repeat(4, 1fr);
+          grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
           gap: 16px;
           margin-bottom: 22px;
         }
@@ -486,6 +493,8 @@ export default function StockPage() {
           border: 1px solid #e5e7eb;
           border-radius: 12px;
           padding: 20px;
+          border-top: 4px solid #2563eb;
+          box-shadow: 0 2px 8px rgba(16, 24, 40, 0.04);
         }
 
         .summaryTitle {
@@ -495,8 +504,9 @@ export default function StockPage() {
 
         .summaryValue {
           margin-top: 8px;
-          font-size: 28px;
+          font-size: 30px;
           font-weight: 700;
+          color: #172033;
         }
 
         .panel {
@@ -505,6 +515,7 @@ export default function StockPage() {
           border-radius: 12px;
           margin-bottom: 22px;
           overflow: hidden;
+          box-shadow: 0 2px 8px rgba(16, 24, 40, 0.04);
         }
 
         .panelHeader {
@@ -552,13 +563,27 @@ export default function StockPage() {
         }
 
         th {
-          background: #f9fafb;
-          color: #4b5563;
+          background: #eaf0f8;
+          color: #1e3a5f;
           font-size: 13px;
+          border-bottom: 2px solid #cbd5e1;
         }
 
         td {
           font-size: 14px;
+        }
+
+        tbody tr:nth-child(even) {
+          background: #f8fafc;
+        }
+
+        tbody tr:hover {
+          background: #eff6ff;
+        }
+
+        tbody td:nth-child(5) {
+          color: #047857;
+          font-weight: 800;
         }
 
         .status,
