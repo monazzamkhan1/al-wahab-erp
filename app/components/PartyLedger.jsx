@@ -14,6 +14,7 @@ export default function PartyLedger({ kind }) {
     ? { singular: "Supplier", plural: "Suppliers", invoice: "Purchase Invoice", payment: "Supplier Payment", direction: "Pay to Supplier", title: "Supplier Detail Ledger", href: "/payables" }
     : { singular: "Customer", plural: "Customers", invoice: "Sale Invoice", payment: "Customer Receipt", direction: "Receive from Customer", title: "Customer Detail Ledger", href: "/receivables" };
   const [parties, setParties] = useState([]);
+  const [partySummaries, setPartySummaries] = useState([]);
   const [partyId, setPartyId] = useState("");
   const [partySearch, setPartySearch] = useState("");
   const [fromDate, setFromDate] = useState(yearStart);
@@ -41,12 +42,43 @@ export default function PartyLedger({ kind }) {
     if (matched) setPartyId(matched.id);
   }
 
+  function openParty(party) {
+    setPartySearch(party.name);
+    setPartyId(party.id);
+  }
+
   async function loadParties() {
     setLoading(true); setError("");
     const query = supplier ? supabase.from("companies").select("id,name,company_type").in("company_type", ["supplier", "both"]).order("name") : supabase.from("customers").select("id,name").order("name");
     const { data, error: loadError } = await query;
     if (loadError) setError(`${labels.plural} load nahi ho sake: ${loadError.message}`);
-    else setParties(data || []);
+    else {
+      const loadedParties = data || [];
+      setParties(loadedParties);
+      const invoiceTable = supplier ? "purchases" : "sales";
+      const paymentTable = supplier ? "supplier_payments" : "customer_payments";
+      const partyKey = supplier ? "supplier_id" : "customer_id";
+      const paidKey = supplier ? "paid_amount" : "received_amount";
+      const [invoiceResult, paymentResult] = await Promise.all([
+        supabase.from(invoiceTable).select(partyKey + ",total_amount," + paidKey),
+        supabase.from(paymentTable).select(partyKey + ",amount"),
+      ]);
+      if (invoiceResult.error || paymentResult.error) {
+        setError("Party summary load nahi ho saki: " + (invoiceResult.error || paymentResult.error).message);
+      } else {
+        const summaryById = {};
+        loadedParties.forEach((party) => { summaryById[party.id] = { party, invoices: 0, debit: 0, credit: 0 }; });
+        (invoiceResult.data || []).forEach((invoice) => {
+          const summary = summaryById[invoice[partyKey]];
+          if (summary) { summary.invoices += 1; summary.debit += Number(invoice.total_amount || 0); summary.credit += Number(invoice[paidKey] || 0); }
+        });
+        (paymentResult.data || []).forEach((payment) => {
+          const summary = summaryById[payment[partyKey]];
+          if (summary) summary.credit += Number(payment.amount || 0);
+        });
+        setPartySummaries(Object.values(summaryById).map((summary) => ({ ...summary, balance: summary.debit - summary.credit })));
+      }
+    }
     setLoading(false);
   }
 
@@ -97,6 +129,7 @@ export default function PartyLedger({ kind }) {
   const totals = entries.reduce((sum, entry) => ({ debit: sum.debit + entry.debit, credit: sum.credit + entry.credit }), { debit: 0, credit: 0 });
   const totalBalance = entries.length ? entries[entries.length - 1].balance : 0;
   const itemByInvoice = useMemo(() => items.reduce((map, item) => { const key = item[supplier ? "purchase_id" : "sale_id"]; (map[key] ||= []).push(item); return map; }, {}), [items, supplier]);
+  const visiblePartySummaries = partySummaries.filter((summary) => summary.party.name.toLowerCase().includes(partySearch.toLowerCase()));
 
   async function addPayment(event) {
     event.preventDefault(); setMessage(""); setError("");
@@ -120,6 +153,7 @@ export default function PartyLedger({ kind }) {
     {error && <div style={s.error}>{error}<button onClick={partyId ? loadLedger : loadParties} style={s.retry}>Retry</button></div>}
     {message && <div style={s.success}>{message}</div>}
     <section style={s.card} className="noPrint"><div style={s.filterGrid}><label style={s.label}>Select {labels.singular}<input list="party-search" value={partySearch} onChange={(event) => chooseParty(event.target.value)} style={s.input} placeholder={`Type ${labels.singular} name, then select from list...`} disabled={loading}/><datalist id="party-search">{parties.map((party) => <option key={party.id} value={party.name} />)}</datalist></label><label style={s.label}>Starting Date<input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} style={s.input}/></label><label style={s.label}>Ending Date<input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} style={s.input}/></label><button type="button" onClick={loadLedger} style={s.load}>Load Ledger</button></div></section>
+    {!partyId && <section style={s.card} className="noPrint"><div style={s.partyListHead}><div><h2 style={s.h2}>{labels.plural} Overview</h2><p style={s.printSub}>Kisi bhi {labels.singular.toLowerCase()} par click karke detailed ledger kholain.</p></div><strong>{visiblePartySummaries.length} {labels.plural}</strong></div>{loading ? <p>Loading {labels.plural.toLowerCase()}...</p> : !visiblePartySummaries.length ? <p style={s.muted}>Koi {labels.singular.toLowerCase()} nahi mila.</p> : <div style={s.partyList}>{visiblePartySummaries.map((summary) => <button type="button" key={summary.party.id} onClick={() => openParty(summary.party)} style={s.partyCard}><span style={s.partyCardName}>{summary.party.name}</span><span style={s.partyStats}><small>{labels.invoice}: {summary.invoices}</small><small>Invoice Total: {money(summary.debit)}</small><small>Paid / Received: {money(summary.credit)}</small></span><strong style={{ color: summary.balance > 0 ? "#b54708" : "#067647" }}>{summary.balance > 0 ? "Outstanding: " : "Advance / Settled: "}{money(Math.abs(summary.balance))}</strong><span style={s.openLedger}>Open Detail Ledger →</span></button>)}</div>}</section>}
     {partyId && <>
       <section style={s.ledgerHeader}><div style={s.brand}><img src="/images/al-wahab-logo-transparent.png" alt="Al Wahab Enterprises" style={s.logo}/><div><h2 style={s.partyName}>{partyName}</h2><strong>{labels.title}</strong><p style={s.printSub}>Starting Date: {fromDate} &nbsp; | &nbsp; Ending Date: {toDate}</p></div></div><div style={s.balanceBox}><span>Outstanding Balance</span><strong>{money(totalBalance)}</strong><small>{supplier ? "Payable to supplier" : "Receivable from customer"}</small></div></section>
       <section style={s.card} className="noPrint"><h2 style={s.h2}>Record Payment</h2><p style={s.direction}><b>{labels.direction}</b> - is entry se ledger mein credit aur balance kam hoga.</p><form onSubmit={addPayment} style={s.filterGrid}><label style={s.label}>Amount *<input required min="0.01" step="0.01" type="number" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} style={s.input}/></label><label style={s.label}>Date *<input required type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} style={s.input}/></label><label style={s.label}>Payment Method<select value={form.method} onChange={(event) => setForm({ ...form, method: event.target.value })} style={s.input}>{["cash", "bank_transfer", "online_transfer", "cheque", "other"].map((method) => <option key={method} value={method}>{niceMethod(method)}</option>)}</select></label><label style={s.label}>Invoice (optional)<select value={form.invoiceId} onChange={(event) => setForm({ ...form, invoiceId: event.target.value })} style={s.input}><option value="">Whole party ledger</option>{invoices.map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.invoice_no} - {money(invoice.total_amount)}</option>)}</select></label><label style={s.label}>Reference / Cheque No.<input value={form.reference} onChange={(event) => setForm({ ...form, reference: event.target.value })} style={s.input}/></label><label style={s.label}>Narration / Notes<input value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} style={s.input}/></label><button disabled={saving} style={s.save}>{saving ? "Saving..." : labels.direction}</button></form></section>
@@ -130,4 +164,4 @@ export default function PartyLedger({ kind }) {
   </div></main>;
 }
 
-const s = {page:{minHeight:"100vh",background:"#f5f7fb",padding:"30px 16px",fontFamily:"Arial,Helvetica,sans-serif",color:"#172033"},wrap:{maxWidth:1320,margin:"0 auto"},header:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16,marginBottom:20,flexWrap:"wrap"},title:{margin:"0 0 6px",fontSize:30},sub:{margin:0,color:"#667085"},actions:{display:"flex",gap:10,flexWrap:"wrap"},back:{background:"#e8edf5",color:"#344054",textDecoration:"none",padding:"10px 15px",borderRadius:8,fontWeight:600},card:{background:"#fff",border:"1px solid #e4e7ec",borderRadius:14,padding:22,marginBottom:18,boxShadow:"0 2px 8px rgba(16,24,40,.04)"},filterGrid:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(185px,1fr))",gap:15,alignItems:"end"},ledgerHeader:{background:"#fff",border:"1px solid #e4e7ec",borderRadius:14,padding:22,marginBottom:18,display:"flex",justifyContent:"space-between",alignItems:"center",gap:20,flexWrap:"wrap"},brand:{display:"flex",alignItems:"center",gap:16},logo:{width:78,height:78,objectFit:"contain"},partyName:{margin:"0 0 6px",fontSize:26},balanceBox:{textAlign:"right",display:"grid",gap:5},h2:{margin:"0 0 8px",fontSize:20},printSub:{margin:"4px 0",color:"#667085",fontSize:13},direction:{margin:"0 0 16px",padding:10,borderRadius:8,background:"#eff6ff",color:"#1d4ed8"},label:{display:"block",fontSize:13,fontWeight:700},input:{width:"100%",boxSizing:"border-box",marginTop:7,padding:11,border:"1px solid #d0d5dd",borderRadius:8,background:"#fff",fontSize:14},load:{border:0,borderRadius:8,padding:"12px 16px",background:"#172033",color:"#fff",fontWeight:700,cursor:"pointer"},save:{border:0,borderRadius:8,padding:"12px 16px",background:"#16a34a",color:"#fff",fontWeight:700,cursor:"pointer"},print:{border:0,borderRadius:8,padding:"10px 14px",background:"#0f766e",color:"#fff",fontWeight:700,cursor:"pointer"},error:{background:"#fee2e2",color:"#991b1b",padding:14,borderRadius:8,marginBottom:18},success:{background:"#ecfdf3",color:"#067647",padding:14,borderRadius:8,marginBottom:18},retry:{marginLeft:12,border:0,borderRadius:6,padding:"6px 10px",background:"#991b1b",color:"#fff"},tableHead:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:12},toggle:{fontWeight:600,fontSize:13},scroll:{overflowX:"auto"},table:{width:"100%",tableLayout:"fixed",borderCollapse:"collapse",minWidth:1080,fontSize:13},entryRow:{borderTop:"1px solid #d0d5dd",background:"#f8fafc"},itemRow:{borderTop:"1px solid #eaecf0",color:"#475467"},totalRow:{borderTop:"2px solid #98a2b3",fontWeight:800},note:{fontSize:12,color:"#667085"},muted:{color:"#667085"}};
+const s = {page:{minHeight:"100vh",background:"#f5f7fb",padding:"30px 16px",fontFamily:"Arial,Helvetica,sans-serif",color:"#172033"},wrap:{maxWidth:1320,margin:"0 auto"},header:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16,marginBottom:20,flexWrap:"wrap"},title:{margin:"0 0 6px",fontSize:30},sub:{margin:0,color:"#667085"},actions:{display:"flex",gap:10,flexWrap:"wrap"},back:{background:"#e8edf5",color:"#344054",textDecoration:"none",padding:"10px 15px",borderRadius:8,fontWeight:600},card:{background:"#fff",border:"1px solid #e4e7ec",borderRadius:14,padding:22,marginBottom:18,boxShadow:"0 2px 8px rgba(16,24,40,.04)"},filterGrid:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(185px,1fr))",gap:15,alignItems:"end"},partyListHead:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16,marginBottom:16,flexWrap:"wrap"},partyList:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(265px,1fr))",gap:14},partyCard:{border:"1px solid #d0d5dd",borderRadius:10,background:"#fff",padding:16,textAlign:"left",display:"grid",gap:10,cursor:"pointer",color:"#172033",fontFamily:"inherit"},partyCardName:{fontWeight:800,fontSize:16},partyStats:{display:"grid",gap:4,color:"#475467"},openLedger:{color:"#2563eb",fontWeight:700,fontSize:13},ledgerHeader:{background:"#fff",border:"1px solid #e4e7ec",borderRadius:14,padding:22,marginBottom:18,display:"flex",justifyContent:"space-between",alignItems:"center",gap:20,flexWrap:"wrap"},brand:{display:"flex",alignItems:"center",gap:16},logo:{width:78,height:78,objectFit:"contain"},partyName:{margin:"0 0 6px",fontSize:26},balanceBox:{textAlign:"right",display:"grid",gap:5},h2:{margin:"0 0 8px",fontSize:20},printSub:{margin:"4px 0",color:"#667085",fontSize:13},direction:{margin:"0 0 16px",padding:10,borderRadius:8,background:"#eff6ff",color:"#1d4ed8"},label:{display:"block",fontSize:13,fontWeight:700},input:{width:"100%",boxSizing:"border-box",marginTop:7,padding:11,border:"1px solid #d0d5dd",borderRadius:8,background:"#fff",fontSize:14},load:{border:0,borderRadius:8,padding:"12px 16px",background:"#172033",color:"#fff",fontWeight:700,cursor:"pointer"},save:{border:0,borderRadius:8,padding:"12px 16px",background:"#16a34a",color:"#fff",fontWeight:700,cursor:"pointer"},print:{border:0,borderRadius:8,padding:"10px 14px",background:"#0f766e",color:"#fff",fontWeight:700,cursor:"pointer"},error:{background:"#fee2e2",color:"#991b1b",padding:14,borderRadius:8,marginBottom:18},success:{background:"#ecfdf3",color:"#067647",padding:14,borderRadius:8,marginBottom:18},retry:{marginLeft:12,border:0,borderRadius:6,padding:"6px 10px",background:"#991b1b",color:"#fff"},tableHead:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:12},toggle:{fontWeight:600,fontSize:13},scroll:{overflowX:"auto"},table:{width:"100%",tableLayout:"fixed",borderCollapse:"collapse",minWidth:1080,fontSize:13},entryRow:{borderTop:"1px solid #d0d5dd",background:"#f8fafc"},itemRow:{borderTop:"1px solid #eaecf0",color:"#475467"},totalRow:{borderTop:"2px solid #98a2b3",fontWeight:800},note:{fontSize:12,color:"#667085"},muted:{color:"#667085"}};
