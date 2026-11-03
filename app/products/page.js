@@ -45,6 +45,8 @@ export default function ProductsPage() {
   const [suppliers, setSuppliers] = useState([]);
   const [productSuppliers, setProductSuppliers] = useState({});
   const [downloading, setDownloading] = useState(false);
+  const [supplierSearch, setSupplierSearch] = useState("");
+  const [supplierOpen, setSupplierOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
@@ -82,7 +84,7 @@ export default function ProductsPage() {
       .from("products")
       .select(`
         *,
-        companies (
+        companies!products_company_id_fkey (
           id,
           name,
           company_type
@@ -94,7 +96,7 @@ export default function ProductsPage() {
       setMessage(error.message);
     } else {
       setProducts(data || []);
-      const { data: links, error: linkError } = await supabase.from("product_suppliers").select("product_id,supplier_id,companies(name)");
+      const { data: links, error: linkError } = await supabase.from("product_suppliers").select("product_id,supplier_id,companies!product_suppliers_supplier_id_fkey(name)");
       if (linkError) setMessage(`Product suppliers load nahi ho sake: ${linkError.message}`);
       else setProductSuppliers((links || []).reduce((map, link) => { (map[link.product_id] ||= []).push({ id: link.supplier_id, name: link.companies?.name || "Supplier" }); return map; }, {}));
     }
@@ -147,6 +149,8 @@ export default function ProductsPage() {
     });
 
     setEditingId(null);
+    setSupplierSearch("");
+    setSupplierOpen(false);
   }
 
   function generateProductCode() {
@@ -249,6 +253,8 @@ export default function ProductsPage() {
       min_stock: product.min_stock || "",
       supplier_ids: (productSuppliers[product.id] || []).map((supplier) => supplier.id),
     });
+    setSupplierSearch("");
+    setSupplierOpen(false);
 
     window.scrollTo({
       top: 0,
@@ -327,6 +333,19 @@ export default function ProductsPage() {
 
     return text.includes(search.toLowerCase());
   });
+
+  const matchingSuppliers = suppliers.filter((supplier) =>
+    supplier.name.toLowerCase().includes(supplierSearch.toLowerCase())
+  );
+
+  function toggleSupplier(supplierId) {
+    setForm((current) => ({
+      ...current,
+      supplier_ids: current.supplier_ids.includes(supplierId)
+        ? current.supplier_ids.filter((id) => id !== supplierId)
+        : [...current.supplier_ids, supplierId],
+    }));
+  }
 
   return (
     <main
@@ -470,11 +489,19 @@ export default function ProductsPage() {
               )}
             </div>
 
-            <div style={{ gridColumn: "span 2" }}>
+            <div style={{ gridColumn: "span 2", position: "relative" }}>
               <label style={labelStyle}>Supplier / Distributor</label>
-              <div style={{ ...inputStyle, minHeight: 42, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                {suppliers.length ? suppliers.map((supplier) => <label key={supplier.id} style={{ display: "flex", gap: 5, alignItems: "center", fontSize: 13, cursor: "pointer" }}><input type="checkbox" checked={form.supplier_ids.includes(supplier.id)} onChange={(event) => setForm({ ...form, supplier_ids: event.target.checked ? [...form.supplier_ids, supplier.id] : form.supplier_ids.filter((id) => id !== supplier.id) })}/>{supplier.name}</label>) : <span style={{ color: "#dc2626", fontSize: 13 }}>No Supplier / Distributor added yet.</span>}
+              <div style={{ ...inputStyle, minHeight: 42, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", padding: "6px 8px" }}>
+                {form.supplier_ids.map((id) => {
+                  const supplier = suppliers.find((item) => item.id === id);
+                  return supplier ? <span key={id} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 8px", borderRadius: 999, background: "#dbeafe", color: "#1d4ed8", fontSize: 12, fontWeight: 700 }}>{supplier.name}<button type="button" onClick={() => toggleSupplier(id)} aria-label={`Remove ${supplier.name}`} style={{ border: 0, background: "transparent", color: "#1d4ed8", cursor: "pointer", fontWeight: 800, padding: 0 }}>×</button></span> : null;
+                })}
+                <input value={supplierSearch} onFocus={() => setSupplierOpen(true)} onBlur={() => setTimeout(() => setSupplierOpen(false), 150)} onChange={(event) => { setSupplierSearch(event.target.value); setSupplierOpen(true); }} placeholder={form.supplier_ids.length ? "Add another supplier..." : "Type supplier name or choose from list"} style={{ border: 0, outline: "none", flex: "1 1 180px", minWidth: 180, padding: "5px", fontSize: 14 }} />
+                <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => setSupplierOpen((open) => !open)} aria-label="Open supplier list" style={{ border: 0, background: "transparent", cursor: "pointer", fontSize: 18, color: "#475569" }}>⌄</button>
               </div>
+              {supplierOpen && <div style={{ position: "absolute", zIndex: 30, top: 70, left: 0, right: 0, maxHeight: 230, overflowY: "auto", background: "#fff", border: "1px solid #cbd5e1", borderRadius: 8, boxShadow: "0 12px 26px rgba(15,23,42,.16)", padding: 5 }}>
+                {matchingSuppliers.length ? matchingSuppliers.map((supplier) => <button key={supplier.id} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { toggleSupplier(supplier.id); setSupplierSearch(""); }} style={{ width: "100%", display: "flex", justifyContent: "space-between", gap: 10, border: 0, background: form.supplier_ids.includes(supplier.id) ? "#eff6ff" : "#fff", color: "#172033", cursor: "pointer", padding: "9px 10px", borderRadius: 5, textAlign: "left" }}><span>{supplier.name}</span><span style={{ color: form.supplier_ids.includes(supplier.id) ? "#2563eb" : "#64748b", fontSize: 12 }}>{form.supplier_ids.includes(supplier.id) ? "Selected" : "Select"}</span></button>) : <p style={{ margin: "9px 10px", color: "#64748b", fontSize: 13 }}>No matching supplier.</p>}
+              </div>}
               <small style={{ color: "#6b7280" }}>Ek product ke ek se zyada supplier select kar sakte hain.</small>
             </div>
 
