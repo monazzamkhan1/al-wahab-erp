@@ -186,6 +186,22 @@ export default function CustomersPage() {
 
     if (!confirmDelete) return;
 
+    setMessage("");
+    const [salesCheck, paymentsCheck] = await Promise.all([
+      supabase.from("sales").select("id", { count: "exact", head: true }).eq("customer_id", id),
+      supabase.from("customer_payments").select("id", { count: "exact", head: true }).eq("customer_id", id),
+    ]);
+
+    if (salesCheck.error || paymentsCheck.error) {
+      setMessage(`Customer delete check nahi ho saka: ${(salesCheck.error || paymentsCheck.error).message}`);
+      return;
+    }
+
+    if (Number(salesCheck.count || 0) || Number(paymentsCheck.count || 0)) {
+      setMessage("Is customer ki sale ya payment history maujood hai, is liye accounting record safe rakhne ke liye delete nahi kiya ja sakta.");
+      return;
+    }
+
     const { error } = await supabase
       .from("customers")
       .delete()
