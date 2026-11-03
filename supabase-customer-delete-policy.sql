@@ -10,3 +10,11 @@ on public.customers
 for delete
 to authenticated
 using (true);
+
+drop policy if exists "Authenticated users can update customers" on public.customers;
+create policy "Authenticated users can update customers"
+on public.customers
+for update
+to authenticated
+using (true)
+with check (true);
