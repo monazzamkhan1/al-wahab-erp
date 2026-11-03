@@ -6,6 +6,7 @@ import { supabase } from "../supabase";
 const customerTypes = [
   "Hospital",
   "Clinic",
+  "Medical Store",
   "Pharmacy",
   "Doctor",
   "Distributor",
@@ -150,6 +151,8 @@ export default function CustomersPage() {
         ? "Hospital"
         : customer.customer_type === "clinic"
         ? "Clinic"
+        : customer.customer_type === "medical store"
+        ? "Medical Store"
         : customer.customer_type === "pharmacy"
         ? "Pharmacy"
         : customer.customer_type === "doctor"
