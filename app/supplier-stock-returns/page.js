@@ -12,7 +12,7 @@ function SearchDropdown({ label, value, onChange, options, placeholder, disabled
 }
 
 export default function SupplierStockReturnsPage() {
-  const [suppliers, setSuppliers] = useState([]); const [products, setProducts] = useState([]); const [batches, setBatches] = useState([]); const [returns, setReturns] = useState([]);
+  const [suppliers, setSuppliers] = useState([]); const [products, setProducts] = useState([]); const [batches, setBatches] = useState([]); const [returns, setReturns] = useState([]); const [supplierBatchIds, setSupplierBatchIds] = useState([]); const [supplierProductIds, setSupplierProductIds] = useState([]);
   const [form, setForm] = useState({ supplierId: "", productId: "", batchId: "", quantity: "", date: new Date().toISOString().slice(0, 10), reference: "", notes: "" });
   const [supplierSearch, setSupplierSearch] = useState(""); const [productSearch, setProductSearch] = useState(""); const [batchSearch, setBatchSearch] = useState("");
   const [message, setMessage] = useState(""); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false);
@@ -35,7 +35,22 @@ export default function SupplierStockReturnsPage() {
     setForm({ ...form, productId, batchId: "" }); setBatchSearch("");
     if (!productId) { setBatches([]); return; }
     const { data, error } = await supabase.from("product_batches").select("id,batch_no,expiry_date,quantity").eq("product_id", productId).order("expiry_date");
-    if (error) setMessage(error.message); else setBatches(data || []);
+    if (error) setMessage(error.message); else setBatches((data || []).filter((batch) => supplierBatchIds.includes(batch.id) && Number(batch.quantity || 0) > 0));
+  }
+
+  async function chooseSupplier(value) {
+    const selectedSupplier = suppliers.find((supplier) => supplier.name === value);
+    setSupplierSearch(value); setProductSearch(""); setBatchSearch(""); setBatches([]); setSupplierBatchIds([]); setSupplierProductIds([]);
+    setForm((current) => ({ ...current, supplierId: selectedSupplier?.id || "", productId: "", batchId: "" }));
+    if (!selectedSupplier) return;
+    const { data: purchases, error: purchaseError } = await supabase.from("purchases").select("id").eq("supplier_id", selectedSupplier.id);
+    if (purchaseError) { setMessage(purchaseError.message); return; }
+    const purchaseIds = (purchases || []).map((purchase) => purchase.id);
+    if (!purchaseIds.length) return;
+    const { data: items, error: itemError } = await supabase.from("purchase_items").select("product_id,batch_id").in("purchase_id", purchaseIds);
+    if (itemError) { setMessage(itemError.message); return; }
+    setSupplierBatchIds([...new Set((items || []).map((item) => item.batch_id).filter(Boolean))]);
+    setSupplierProductIds([...new Set((items || []).map((item) => item.product_id).filter(Boolean))]);
   }
 
   async function save(event) {
@@ -56,11 +71,12 @@ export default function SupplierStockReturnsPage() {
 
   const productName = (id) => products.find((product) => product.id === id)?.product_name || "Product";
   const supplierName = (id) => suppliers.find((supplier) => supplier.id === id)?.name || "Supplier";
+  const eligibleProducts = products.filter((product) => supplierProductIds.includes(product.id));
 
   return <main style={s.page}><div style={s.wrap}><header style={s.header}><div><h1 style={s.title}>Supplier Stock Returns</h1><p style={s.sub}>Supplier ko wapas bheja gaya stock selected batch se minus karein.</p></div><div style={s.actions}><a href="/stock-returns" style={s.back}>Customer Returns</a><a href="/stock" style={s.back}>← Stock</a></div></header>{message && <div style={s.message}>{message}</div>}
     <section style={s.card}><h2 style={s.h2}>New Supplier Return</h2><p style={s.notice}>Yeh entry stock ko selected batch se kam karegi. Supplier select karna zaroori hai.</p><form onSubmit={save} style={s.grid}>
-      <SearchDropdown label="Supplier *" value={supplierSearch} onChange={(value) => { setSupplierSearch(value); setForm({ ...form, supplierId: suppliers.find((supplier) => supplier.name === value)?.id || "" }); }} options={suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }))} placeholder="Type supplier name" />
-      <SearchDropdown label="Product *" value={productSearch} onChange={(value) => { setProductSearch(value); const product = products.find((row) => (row.product_name + (row.pack_size ? " (" + row.pack_size + ")" : "")) === value); selectProduct(product?.id || ""); }} options={products.map((product) => ({ value: product.id, label: product.product_name + (product.pack_size ? " (" + product.pack_size + ")" : "") }))} placeholder="Type product name or pack" />
+      <SearchDropdown label="Supplier *" value={supplierSearch} onChange={chooseSupplier} options={suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }))} placeholder="Type supplier name" />
+      <SearchDropdown label="Product *" value={productSearch} onChange={(value) => { setProductSearch(value); const product = eligibleProducts.find((row) => (row.product_name + (row.pack_size ? " (" + row.pack_size + ")" : "")) === value); selectProduct(product?.id || ""); }} options={eligibleProducts.map((product) => ({ value: product.id, label: product.product_name + (product.pack_size ? " (" + product.pack_size + ")" : "") }))} placeholder={form.supplierId ? "Type product name or pack" : "Select supplier first"} disabled={!form.supplierId} />
       <SearchDropdown label="Batch *" value={batchSearch} onChange={(value) => { setBatchSearch(value); setForm({ ...form, batchId: batches.find((batch) => (batch.batch_no + " · Available " + Number(batch.quantity).toLocaleString()) === value)?.id || "" }); }} options={batches.map((batch) => ({ value: batch.id, label: batch.batch_no + " · Available " + Number(batch.quantity).toLocaleString() }))} placeholder="Type or select batch" disabled={!form.productId} />
       <label style={s.label}>Return Quantity *<input required min="1" type="number" value={form.quantity} onChange={(event) => setForm({ ...form, quantity: event.target.value })} style={s.input}/></label>
       <label style={s.label}>Return Date *<input required type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} style={s.input}/></label>
