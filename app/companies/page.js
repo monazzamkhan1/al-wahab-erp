@@ -14,6 +14,7 @@ export default function CompaniesPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
+  const [showManufacturers, setShowManufacturers] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [message, setMessage] = useState("");
 
@@ -195,7 +196,8 @@ export default function CompaniesPage() {
       ${displayType(company.company_type)}
     `.toLowerCase();
 
-    return text.includes(search.toLowerCase());
+    const isSupplier = ["supplier", "both"].includes(company.company_type);
+    return (showManufacturers || isSupplier) && text.includes(search.toLowerCase());
   });
 
   return (
@@ -473,28 +475,23 @@ export default function CompaniesPage() {
           }}
         >
           <h2 style={{ margin: 0 }}>
-            Company List
+            Supplier List
           </h2>
 
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search company..."
-            style={{
-              padding: "10px",
-              width: "240px",
-              maxWidth: "100%",
-              border: "1px solid #d1d5db",
-              borderRadius: "7px",
-            }}
-          />
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search supplier..." style={{ padding: "10px", width: "240px", maxWidth: "100%", border: "1px solid #d1d5db", borderRadius: "7px" }} />
+            <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13, color: "#475569" }}>
+              <input type="checkbox" checked={showManufacturers} onChange={(e) => setShowManufacturers(e.target.checked)} />
+              Show manufacturer records
+            </label>
+          </div>
         </div>
 
         {loading ? (
           <p>Loading companies...</p>
         ) : filteredCompanies.length === 0 ? (
           <p style={{ color: "#6b7280" }}>
-            No companies found.
+            No suppliers found.
           </p>
         ) : (
           <div style={{ overflowX: "auto" }}>

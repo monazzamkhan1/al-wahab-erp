@@ -42,6 +42,9 @@ const categories = [
 export default function ProductsPage() {
   const [products, setProducts] = useState([]);
   const [companies, setCompanies] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [productSuppliers, setProductSuppliers] = useState({});
+  const [downloading, setDownloading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
@@ -61,6 +64,7 @@ export default function ProductsPage() {
     purchase_rate: "",
     sale_rate: "",
     min_stock: "",
+    supplier_ids: [],
   });
 
   const [editingId, setEditingId] = useState(null);
@@ -90,6 +94,9 @@ export default function ProductsPage() {
       setMessage(error.message);
     } else {
       setProducts(data || []);
+      const { data: links, error: linkError } = await supabase.from("product_suppliers").select("product_id,supplier_id,companies(name)");
+      if (linkError) setMessage(`Product suppliers load nahi ho sake: ${linkError.message}`);
+      else setProductSuppliers((links || []).reduce((map, link) => { (map[link.product_id] ||= []).push({ id: link.supplier_id, name: link.companies?.name || "Supplier" }); return map; }, {}));
     }
 
     setLoading(false);
@@ -108,6 +115,9 @@ export default function ProductsPage() {
     } else {
       setCompanies(data || []);
     }
+
+    const { data: supplierData, error: supplierError } = await supabase.from("companies").select("id,name,company_type").in("company_type", ["supplier", "both"]).eq("is_active", true).order("name", { ascending: true });
+    if (supplierError) setMessage(supplierError.message); else setSuppliers(supplierData || []);
   }
 
   function handleChange(e) {
@@ -133,6 +143,7 @@ export default function ProductsPage() {
       purchase_rate: "",
       sale_rate: "",
       min_stock: "",
+      supplier_ids: [],
     });
 
     setEditingId(null);
@@ -184,16 +195,27 @@ export default function ProductsPage() {
       result = await supabase
         .from("products")
         .update(productData)
-        .eq("id", editingId);
+        .eq("id", editingId)
+        .select("id")
+        .single();
     } else {
       result = await supabase
         .from("products")
-        .insert([productData]);
+        .insert([productData])
+        .select("id")
+        .single();
     }
 
     if (result.error) {
       setMessage(result.error.message);
     } else {
+      const productId = result.data.id;
+      const { error: removeSupplierError } = await supabase.from("product_suppliers").delete().eq("product_id", productId);
+      if (removeSupplierError) { setMessage(`Product save ho gaya, lekin supplier update nahi ho saka: ${removeSupplierError.message}`); setSaving(false); return; }
+      if (form.supplier_ids.length) {
+        const { error: supplierSaveError } = await supabase.from("product_suppliers").insert(form.supplier_ids.map((supplierId) => ({ product_id: productId, supplier_id: supplierId })));
+        if (supplierSaveError) { setMessage(`Product save ho gaya, lekin supplier update nahi ho saka: ${supplierSaveError.message}`); setSaving(false); return; }
+      }
       setMessage(
         editingId
           ? "Product updated successfully."
@@ -225,12 +247,52 @@ export default function ProductsPage() {
       purchase_rate: product.purchase_rate || "",
       sale_rate: product.sale_rate || "",
       min_stock: product.min_stock || "",
+      supplier_ids: (productSuppliers[product.id] || []).map((supplier) => supplier.id),
     });
 
     window.scrollTo({
       top: 0,
       behavior: "smooth",
     });
+  }
+
+  async function downloadProductPdf() {
+    const target = document.querySelector(".productListPdf");
+    if (!target || downloading) return;
+
+    setDownloading(true);
+    target.classList.add("exporting");
+
+    try {
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ]);
+      const canvas = await html2canvas(target, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        useCORS: true,
+      });
+      const pdf = new jsPDF("l", "mm", "a4");
+      const margin = 8;
+      const width = 297 - margin * 2;
+      const pageHeight = 210 - margin * 2;
+      const height = (canvas.height * width) / canvas.width;
+      const image = canvas.toDataURL("image/png");
+
+      for (let offset = 0; offset < height; offset += pageHeight) {
+        if (offset) pdf.addPage();
+        pdf.addImage(image, "PNG", margin, margin - offset, width, height);
+      }
+
+      const suffix = search.trim().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "");
+      pdf.save(`Al-Wahab-Product-List${suffix ? `-${suffix}` : ""}.pdf`);
+    } catch (error) {
+      setMessage(`Product PDF nahi ban saki: ${error.message}`);
+    } finally {
+      target.classList.remove("exporting");
+      setDownloading(false);
+    }
   }
 
   async function deleteProduct(id) {
@@ -260,6 +322,7 @@ export default function ProductsPage() {
       ${product.generic_name || ""}
       ${product.category || ""}
       ${product.companies?.name || ""}
+      ${(productSuppliers[product.id] || []).map((supplier) => supplier.name).join(" ")}
     `.toLowerCase();
 
     return text.includes(search.toLowerCase());
@@ -314,7 +377,10 @@ export default function ProductsPage() {
         ← Dashboard
       </a>
 
+      <style>{`.productListPdf.exporting .productListControls { display: none !important; }`}</style>
+
       <section
+        className="productListPdf"
         style={{
           background: "#fff",
           padding: "20px",
@@ -402,6 +468,14 @@ export default function ProductsPage() {
                   No Manufacturer/Principal added yet.
                 </small>
               )}
+            </div>
+
+            <div style={{ gridColumn: "span 2" }}>
+              <label style={labelStyle}>Supplier / Distributor</label>
+              <div style={{ ...inputStyle, minHeight: 42, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                {suppliers.length ? suppliers.map((supplier) => <label key={supplier.id} style={{ display: "flex", gap: 5, alignItems: "center", fontSize: 13, cursor: "pointer" }}><input type="checkbox" checked={form.supplier_ids.includes(supplier.id)} onChange={(event) => setForm({ ...form, supplier_ids: event.target.checked ? [...form.supplier_ids, supplier.id] : form.supplier_ids.filter((id) => id !== supplier.id) })}/>{supplier.name}</label>) : <span style={{ color: "#dc2626", fontSize: 13 }}>No Supplier / Distributor added yet.</span>}
+              </div>
+              <small style={{ color: "#6b7280" }}>Ek product ke ek se zyada supplier select kar sakte hain.</small>
             </div>
 
             <div>
@@ -635,22 +709,24 @@ export default function ProductsPage() {
             marginBottom: "15px",
           }}
         >
-          <h2 style={{ margin: 0 }}>
-            Product List
-          </h2>
+          <div>
+            <h2 style={{ margin: 0 }}>Product List</h2>
+            <p style={{ margin: "5px 0 0", color: "#64748b", fontSize: 13 }}>
+              Manufacturer aur purchase source ke saath product master
+            </p>
+          </div>
 
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search product..."
-            style={{
-              padding: "10px",
-              width: "240px",
-              maxWidth: "100%",
-              border: "1px solid #d1d5db",
-              borderRadius: "7px",
-            }}
-          />
+          <div className="productListControls" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search product, manufacturer or supplier..."
+              style={{ padding: "10px", width: "290px", maxWidth: "100%", border: "1px solid #d1d5db", borderRadius: "7px" }}
+            />
+            <button onClick={downloadProductPdf} disabled={downloading || loading} style={{ padding: "10px 14px", background: "#0f766e", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, cursor: "pointer" }}>
+              {downloading ? "Preparing PDF..." : "Download PDF"}
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -665,7 +741,7 @@ export default function ProductsPage() {
               style={{
                 width: "100%",
                 borderCollapse: "collapse",
-                minWidth: "1000px",
+                minWidth: "1120px",
               }}
             >
               <thead>
@@ -673,6 +749,7 @@ export default function ProductsPage() {
                   <th style={thStyle}>Code</th>
                   <th style={thStyle}>Product</th>
                   <th style={thStyle}>Manufacturer</th>
+                  <th style={thStyle}>Supplier / Distributor</th>
                   <th style={thStyle}>Generic</th>
                   <th style={thStyle}>Form</th>
                   <th style={thStyle}>Pack</th>
@@ -699,6 +776,10 @@ export default function ProductsPage() {
 
                     <td style={tdStyle}>
                       {product.companies?.name || "-"}
+                    </td>
+
+                    <td style={tdStyle}>
+                      {(productSuppliers[product.id] || []).map((supplier) => supplier.name).join(", ") || "-"}
                     </td>
 
                     <td style={tdStyle}>
