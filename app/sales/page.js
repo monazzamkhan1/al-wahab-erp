@@ -155,10 +155,13 @@ export default function SalesPage() {
     }
   }
 
+  const discountPercent = Math.min(Math.max(Number(discount || 0), 0), 100);
+  const netSaleRate = Number(saleRate || 0) * (1 - discountPercent / 100);
+  const discountValue = Number(quantity || 0) * Number(saleRate || 0) - Number(quantity || 0) * netSaleRate;
   const lineAmount = useMemo(() => {
-    const gross = Number(quantity || 0) * Number(saleRate || 0);
-    return Math.max(gross - Number(discount || 0) + Number(tax || 0), 0);
-  }, [quantity, saleRate, discount, tax]);
+    const netLine = Number(quantity || 0) * netSaleRate;
+    return Math.max(netLine + Number(tax || 0), 0);
+  }, [quantity, netSaleRate, tax]);
 
   function addItem() {
     const batch = batches.find((item) => item.id === batchId);
@@ -188,8 +191,8 @@ export default function SalesPage() {
         available: Number(batch.quantity),
         quantity: Number(quantity),
         bonus_quantity: Number(bonusQuantity || 0),
-        sale_rate: Number(saleRate),
-        discount: Number(discount || 0),
+        sale_rate: netSaleRate,
+        discount: discountPercent,
         tax: Number(tax || 0),
         amount: lineAmount,
         mrp: Number(product?.mrp || 0),
@@ -366,25 +369,25 @@ export default function SalesPage() {
             <label style={styles.label}>Bonus
               <input type="number" value={bonusQuantity} onChange={(e) => setBonusQuantity(e.target.value)} style={styles.input} min="0" placeholder="0" />
             </label>
-            <label style={styles.label}>Sale Rate *
+            <label style={styles.label}>Sale Rate (Before Discount) *
               <input type="number" value={saleRate} onChange={(e) => setSaleRate(e.target.value)} style={styles.input} min="0" />
             </label>
-            <label style={styles.label}>Discount
-              <input type="number" value={discount} onChange={(e) => setDiscount(e.target.value)} style={styles.input} min="0" />
+            <label style={styles.label}>Discount %
+              <input type="number" value={discount} onChange={(e) => setDiscount(e.target.value)} style={styles.input} min="0" max="100" step="0.01" placeholder="0" />
             </label>
             <label style={styles.label}>Tax
               <input type="number" value={tax} onChange={(e) => setTax(e.target.value)} style={styles.input} min="0" />
             </label>
           </div>
-          <div style={styles.lineTotal}><span>Current Line Amount</span><strong>Rs. {lineAmount.toLocaleString()}</strong></div>
+          <div style={styles.lineTotal}><span><b>Net Rate:</b> Rs. {netSaleRate.toLocaleString("en-PK", { maximumFractionDigits: 4 })} {discountPercent > 0 && <small style={{ color: "#667085" }}> · Discount: Rs. {discountValue.toLocaleString("en-PK", { maximumFractionDigits: 4 })}</small>}</span><strong>Current Line Amount: Rs. {lineAmount.toLocaleString("en-PK", { maximumFractionDigits: 4 })}</strong></div>
           <button type="button" onClick={addItem} style={styles.addButton}>+ Add Item</button>
         </section>
 
         <section style={styles.card}>
           <h2 style={styles.sectionTitle}>Sale Items</h2>
           {items.length === 0 ? <div style={styles.empty}>Abhi koi item add nahi kiya gaya.</div> : (
-            <div style={styles.tableWrap}><table style={styles.table}><thead><tr><th style={styles.th}>Product</th><th style={styles.th}>Batch</th><th style={styles.th}>Qty</th><th style={styles.th}>Bonus</th><th style={styles.th}>Rate</th><th style={styles.th}>Amount</th><th style={styles.th}></th></tr></thead><tbody>
-              {items.map((item) => <tr key={item.tempId}><td style={styles.td}>{item.product_name}</td><td style={styles.td}>{item.batch_no}</td><td style={styles.td}>{item.quantity}</td><td style={styles.td}>{item.bonus_quantity || "-"}</td><td style={styles.td}>Rs. {item.sale_rate.toLocaleString()}</td><td style={styles.td}>Rs. {item.amount.toLocaleString()}</td><td style={styles.td}><button type="button" onClick={() => setItems((current) => current.filter((row) => row.tempId !== item.tempId))} style={styles.remove}>Remove</button></td></tr>)}
+            <div style={styles.tableWrap}><table style={styles.table}><thead><tr><th style={styles.th}>Product</th><th style={styles.th}>Batch</th><th style={styles.th}>Qty</th><th style={styles.th}>Bonus</th><th style={styles.th}>Net Rate</th><th style={styles.th}>Disc. %</th><th style={styles.th}>Amount</th><th style={styles.th}></th></tr></thead><tbody>
+              {items.map((item) => <tr key={item.tempId}><td style={styles.td}>{item.product_name}</td><td style={styles.td}>{item.batch_no}</td><td style={styles.td}>{item.quantity}</td><td style={styles.td}>{item.bonus_quantity || "-"}</td><td style={styles.td}>Rs. {item.sale_rate.toLocaleString()}</td><td style={styles.td}>{Number(item.discount || 0).toLocaleString()}%</td><td style={styles.td}>Rs. {item.amount.toLocaleString()}</td><td style={styles.td}><button type="button" onClick={() => setItems((current) => current.filter((row) => row.tempId !== item.tempId))} style={styles.remove}>Remove</button></td></tr>)}
             </tbody></table></div>
           )}
         </section>
