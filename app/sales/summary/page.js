@@ -84,10 +84,15 @@ export default function SalesSummaryPage() {
   }
 
   const filteredRows = useMemo(() => {
-    const includes = (value, search) => String(value || "").toLowerCase().includes(search.trim().toLowerCase());
+    // Product choices display pack size in brackets, e.g. "Vitaferol - D3 Inj (1's)".
+    // Match normalized words so brackets/apostrophes never make a valid selection blank.
+    const includes = (value, search) => {
+      const normalize = (text) => String(text || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      return normalize(value).includes(normalize(search));
+    };
     return rows.filter((row) =>
       (!customerSearch || includes(row.customer, customerSearch)) &&
-      (!productSearch || includes(row.product + " " + row.pack, productSearch)) &&
+      (!productSearch || includes(row.product + (row.pack ? " (" + row.pack + ")" : ""), productSearch)) &&
       (!supplierSearch || includes(row.supplier, supplierSearch)) &&
       (!batchSearch || includes(row.batch, batchSearch)) &&
       (!fromDate || row.date >= fromDate) &&

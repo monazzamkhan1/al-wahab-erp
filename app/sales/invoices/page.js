@@ -36,8 +36,15 @@ export default function SalesInvoicesPage() {
   }
   const productByInvoice = useMemo(() => items.reduce((map, item) => { (map[item.sale_id] ||= []).push(item); return map; }, {}), [items]);
   const customerOptions = Object.entries(customers).map(([id, name]) => ({ id, name })); const productOptions = Object.entries(products).map(([id, product]) => ({ id, name: `${product.product_name}${product.pack_size ? ` (${product.pack_size})` : ""}` })); const purchaseCost = (invoice) => Object.entries((productByInvoice[invoice.id] || []).reduce((map, item) => { const purchase = purchaseByBatch[item.batch_id]; if (!purchase) return map; map[purchase.supplier] = (map[purchase.supplier] || 0) + (Number(item.quantity || 0) + Number(item.bonus_quantity || 0)) * Number(purchase.rate || 0); return map; }, {}));
-  const matches = (value, search) => String(value || "").toLowerCase().includes(String(search || "").trim().toLowerCase());
-  const filtered = invoices.filter((invoice) => (!customerSearch || matches(customers[invoice.customer_id], customerSearch)) && (!productSearch || (productByInvoice[invoice.id] || []).some((item) => matches((products[item.product_id]?.product_name || "") + " " + (products[item.product_id]?.pack_size || ""), productSearch))) && (!fromDate || invoice.invoice_date >= fromDate) && (!toDate || invoice.invoice_date <= toDate));
+  // Dropdown labels include pack size, for example "Vitaferol - D3 Inj (1's)".
+  // Normalizing both values keeps the filter correct whether the user types the
+  // label, selects it, or omits punctuation around the pack size.
+  const matches = (value, search) => {
+    const normalize = (text) => String(text || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    return normalize(value).includes(normalize(search));
+  };
+  const productLabel = (product) => `${product?.product_name || ""}${product?.pack_size ? ` (${product.pack_size})` : ""}`;
+  const filtered = invoices.filter((invoice) => (!customerSearch || matches(customers[invoice.customer_id], customerSearch)) && (!productSearch || (productByInvoice[invoice.id] || []).some((item) => matches(productLabel(products[item.product_id]), productSearch))) && (!fromDate || invoice.invoice_date >= fromDate) && (!toDate || invoice.invoice_date <= toDate));
   const totals = filtered.reduce((sum, invoice) => ({ total: sum.total + Number(invoice.total_amount || 0), received: sum.received + Number(invoice.received_amount || 0) }), { total: 0, received: 0 });
   const supplierPurchaseTotals = filtered.reduce((summary, invoice) => { purchaseCost(invoice).forEach(([supplier, amount]) => { summary[supplier] = (summary[supplier] || 0) + Number(amount || 0); }); return summary; }, {});
   const grandPurchaseTotal = Object.values(supplierPurchaseTotals).reduce((sum, amount) => sum + Number(amount || 0), 0);
