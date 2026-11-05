@@ -18,6 +18,7 @@ export default function SalesPage() {
     new Date().toISOString().slice(0, 10)
   );
   const [receivedAmount, setReceivedAmount] = useState("");
+  const [invoiceDiscountPercent, setInvoiceDiscountPercent] = useState("");
   const [notes, setNotes] = useState("");
   const [productId, setProductId] = useState("");
   const [productSearch, setProductSearch] = useState("");
@@ -213,7 +214,10 @@ export default function SalesPage() {
     setMessage("");
   }
 
-  const total = items.reduce((sum, item) => sum + item.amount, 0);
+  const itemSubtotal = items.reduce((sum, item) => sum + item.amount, 0);
+  const invoiceDiscountRate = Math.min(Math.max(Number(invoiceDiscountPercent || 0), 0), 100);
+  const invoiceDiscountAmount = itemSubtotal * invoiceDiscountRate / 100;
+  const total = Math.max(itemSubtotal - invoiceDiscountAmount, 0);
   const received = Number(receivedAmount || 0);
   const receivable = Math.max(total - received, 0);
   const selectedCustomer = customers.find((item) => item.id === customerId);
@@ -260,6 +264,11 @@ export default function SalesPage() {
         })),
       });
       if (error) throw error;
+      const { error: invoiceDiscountError } = await supabase.from("sales").update({
+        invoice_discount_percent: invoiceDiscountRate,
+        invoice_discount_amount: invoiceDiscountAmount,
+      }).eq("id", saleId);
+      if (invoiceDiscountError) throw invoiceDiscountError;
 
       setMessage("Sale saved, stock updated. Sale ID: " + saleId);
       setCustomerId("");
@@ -268,6 +277,7 @@ export default function SalesPage() {
       setInvoiceNo(generateSaleInvoiceNo());
       setSaleDate(new Date().toISOString().slice(0, 10));
       setReceivedAmount("");
+      setInvoiceDiscountPercent("");
       setNotes("");
       setBookerName("");
       setSupplierName("");
@@ -318,6 +328,9 @@ export default function SalesPage() {
             </label>
             <label style={styles.label}>Received Amount
               <input type="number" value={receivedAmount} onChange={(e) => setReceivedAmount(e.target.value)} style={styles.input} placeholder="0" min="0" />
+            </label>
+            <label style={styles.label}>Full Invoice Discount % (Optional)
+              <input type="number" value={invoiceDiscountPercent} onChange={(e) => setInvoiceDiscountPercent(e.target.value)} style={styles.input} placeholder="0" min="0" max="100" step="0.01" />
             </label>
           </div>
           <label style={styles.label}>Notes
@@ -393,7 +406,9 @@ export default function SalesPage() {
         </section>
 
         <section style={styles.totalCard}>
-          <div style={styles.totalRow}><span>Grand Total</span><strong>Rs. {total.toLocaleString()}</strong></div>
+          <div style={styles.totalRow}><span>Product Line Subtotal</span><strong>Rs. {itemSubtotal.toLocaleString("en-PK", { maximumFractionDigits: 4 })}</strong></div>
+          {invoiceDiscountRate > 0 && <div style={styles.invoiceDiscountRow}><span>Full Invoice Discount ({invoiceDiscountRate}%)</span><strong>− Rs. {invoiceDiscountAmount.toLocaleString("en-PK", { maximumFractionDigits: 4 })}</strong></div>}
+          <div style={styles.totalRow}><span>Grand Total</span><strong>Rs. {total.toLocaleString("en-PK", { maximumFractionDigits: 4 })}</strong></div>
           <div style={styles.totalRow}><span>Received Amount</span><strong>Rs. {received.toLocaleString()}</strong></div>
           <div style={styles.balanceRow}><span>Customer Receivable</span><strong>Rs. {receivable.toLocaleString()}</strong></div>
           {applyCommission && <div style={styles.commissionRow}><span>Commission (TP basis)</span><strong>Rs. {commissionTotal.toLocaleString()}</strong></div>}
@@ -423,6 +438,7 @@ const styles = {
   remove: { border: "none", background: "#dc2626", color: "#fff", padding: "7px 10px", borderRadius: "6px", cursor: "pointer", fontSize: "12px" },
   totalCard: { background: "#fff", border: "1px solid #e4e7ec", borderRadius: "14px", padding: "22px", marginBottom: "30px" }, totalRow: { display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #eaecf0" }, balanceRow: { display: "flex", justifyContent: "space-between", padding: "15px 0", fontSize: "19px" },
   commissionRow: { display: "flex", justifyContent: "space-between", padding: "10px 0", color: "#7c3aed", borderTop: "1px solid #eaecf0" },
+  invoiceDiscountRow: { display: "flex", justifyContent: "space-between", padding: "10px 0", color: "#b45309", borderBottom: "1px solid #eaecf0" },
   saveButton: { width: "100%", border: "none", background: "#16a34a", color: "#fff", padding: "14px", borderRadius: "9px", cursor: "pointer", fontWeight: "700", fontSize: "16px", marginTop: "18px" },
   message: { background: "#fef3c7", border: "1px solid #fcd34d", color: "#92400e", padding: "12px 15px", borderRadius: "8px", marginBottom: "18px" },
 };
