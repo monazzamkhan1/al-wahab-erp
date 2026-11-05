@@ -270,7 +270,7 @@ export default function SalesPage() {
       }).eq("id", saleId);
       if (invoiceDiscountError) throw invoiceDiscountError;
 
-      setMessage("Sale saved, stock updated. Sale ID: " + saleId);
+      setMessage("Sale saved, stock updated. Opening invoice...");
       setCustomerId("");
       setCustomerSearch("");
       setApplyCommission(false);
@@ -284,6 +284,7 @@ export default function SalesPage() {
       setIncludeWarranty(false);
       setWarrantySigner("Monazzam Khan");
       setItems([]);
+      window.location.assign(`/sales/invoices/${saleId}`);
     } catch (error) {
       console.error(error);
       setMessage("Sale save nahi ho saki: " + error.message);
@@ -305,8 +306,8 @@ export default function SalesPage() {
 
         {message && <div style={styles.message}>{message}</div>}
 
-        <section style={styles.card}>
-          <h2 style={styles.sectionTitle}>Sale Invoice</h2>
+        <section style={{ ...styles.card, ...styles.invoiceCard }}>
+          <div style={styles.sectionBanner}><span style={styles.sectionNumber}>01</span><div><h2 style={{ ...styles.sectionTitle, marginBottom: 4 }}>Sale Invoice</h2><p style={styles.sectionHint}>Customer, invoice date, payment aur invoice-level settings yahan enter karein.</p></div></div>
           <div style={styles.grid}>
             <label style={styles.label}>Customer *
               <div style={styles.productPicker}>
@@ -358,7 +359,7 @@ export default function SalesPage() {
           <div style={styles.grid}>
             <label style={styles.label}>Product *
               <div style={styles.productPicker}>
-                <input value={productSearch} onChange={(e) => handleProductSearchChange(e.target.value)} onFocus={() => setShowProductMatches(true)} style={styles.input} disabled={loading} placeholder="Product name, code ya pack size type karein" autoComplete="off" />
+                <input value={productSearch} onChange={(e) => handleProductSearchChange(e.target.value)} onFocus={() => setShowProductMatches(true)} onBlur={() => setTimeout(() => setShowProductMatches(false), 140)} style={styles.input} disabled={loading} placeholder="Product name, code ya pack size type karein" autoComplete="off" />
                 {showProductMatches && <div style={styles.productMenu}>
                   {matchingProducts.length ? matchingProducts.map((product) => <button key={product.id} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => chooseProduct(product)} style={styles.productOption}><strong>{product.product_name}</strong><span>{product.generic_name ? `${product.generic_name} · ` : ""}{product.pack_size || "No pack size"}{product.product_code ? ` · ${product.product_code}` : ""}</span></button>) : <div style={styles.noProductMatch}>Koi matching product nahi mila.</div>}
                 </div>}
@@ -397,8 +398,8 @@ export default function SalesPage() {
           <button type="button" onClick={addItem} style={styles.addButton}>+ Add Item</button>
         </section>
 
-        <section style={styles.card}>
-          <h2 style={styles.sectionTitle}>Sale Items</h2>
+        <section style={{ ...styles.card, ...styles.itemsCard }}>
+          <div style={styles.sectionBanner}><span style={{ ...styles.sectionNumber, background: "#e8f1ff", color: "#1d4ed8" }}>02</span><div><h2 style={{ ...styles.sectionTitle, marginBottom: 4 }}>Sale Items</h2><p style={styles.sectionHint}>Added products, product-level discount aur net amount review karein.</p></div></div>
           {items.length === 0 ? <div style={styles.empty}>Abhi koi item add nahi kiya gaya.</div> : (
             <div style={styles.tableWrap}><table style={styles.table}><thead><tr><th style={styles.th}>Product</th><th style={styles.th}>Batch</th><th style={styles.th}>Qty</th><th style={styles.th}>Bonus</th><th style={styles.th}>Net Rate</th><th style={styles.th}>Disc. %</th><th style={styles.th}>Amount</th><th style={styles.th}></th></tr></thead><tbody>
               {items.map((item) => <tr key={item.tempId}><td style={styles.td}>{item.product_name}</td><td style={styles.td}>{item.batch_no}</td><td style={styles.td}>{item.quantity}</td><td style={styles.td}>{item.bonus_quantity || "-"}</td><td style={styles.td}>Rs. {item.sale_rate.toLocaleString()}</td><td style={styles.td}>{Number(item.discount || 0).toLocaleString()}%</td><td style={styles.td}>Rs. {item.amount.toLocaleString()}</td><td style={styles.td}><button type="button" onClick={() => setItems((current) => current.filter((row) => row.tempId !== item.tempId))} style={styles.remove}>Remove</button></td></tr>)}
@@ -406,7 +407,7 @@ export default function SalesPage() {
           )}
         </section>
 
-        <section style={styles.totalCard}>
+        <section style={{ ...styles.totalCard, ...styles.totalsCard }}>
           <div style={styles.invoiceDiscountControl}><label style={{ ...styles.label, marginBottom: 0 }}>Full Invoice Discount % <span style={styles.optional}>(Optional — applies after all product discounts)</span><input type="number" value={invoiceDiscountPercent} onChange={(e) => setInvoiceDiscountPercent(e.target.value)} style={styles.invoiceDiscountInput} placeholder="0" min="0" max="100" step="0.01" /></label></div>
           <div style={styles.totalRow}><span>Product Line Subtotal</span><strong>Rs. {itemSubtotal.toLocaleString("en-PK", { maximumFractionDigits: 4 })}</strong></div>
           {invoiceDiscountRate > 0 && <div style={styles.invoiceDiscountRow}><span>Full Invoice Discount ({invoiceDiscountRate}%)</span><strong>− Rs. {invoiceDiscountAmount.toLocaleString("en-PK", { maximumFractionDigits: 4 })}</strong></div>}
@@ -422,12 +423,13 @@ export default function SalesPage() {
 }
 
 const styles = {
-  page: { minHeight: "100vh", background: "#f5f7fb", padding: "30px 16px", fontFamily: "Arial, Helvetica, sans-serif", color: "#172033" },
+  page: { minHeight: "100vh", background: "linear-gradient(135deg,#f3f7fc 0%,#f8fafc 54%,#edf7f3 100%)", padding: "30px 16px", fontFamily: "Arial, Helvetica, sans-serif", color: "#172033" },
   container: { maxWidth: "1250px", margin: "0 auto" },
   header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "20px", marginBottom: "20px", flexWrap: "wrap" },
   title: { margin: "0 0 6px", fontSize: "30px" }, subtitle: { margin: 0, color: "#667085" },
   back: { background: "#e8edf5", color: "#344054", textDecoration: "none", padding: "10px 15px", borderRadius: "8px", fontWeight: "600" },
-  card: { background: "#fff", border: "1px solid #e4e7ec", borderRadius: "14px", padding: "22px", marginBottom: "18px", boxShadow: "0 2px 8px rgba(16,24,40,0.04)" },
+  card: { background: "rgba(255,255,255,.97)", border: "1px solid #dce6f0", borderRadius: "16px", padding: "22px", marginBottom: "18px", boxShadow: "0 8px 22px rgba(28,50,80,.05)" }, invoiceCard: { borderTop: "4px solid #0f766e" }, itemsCard: { borderTop: "4px solid #2563eb" },
+  sectionBanner: { display: "flex", alignItems: "center", gap: 11, paddingBottom: 15, marginBottom: 18, borderBottom: "1px solid #edf1f5" }, sectionNumber: { width: 34, height: 34, display: "grid", placeItems: "center", borderRadius: "10px", background: "#ddf6ef", color: "#0f766e", fontWeight: 800, fontSize: 13 }, sectionHint: { margin: 0, color: "#667085", fontSize: 13 },
   sectionTitle: { marginTop: 0, marginBottom: "18px", fontSize: "20px" }, grid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "15px" },
   label: { display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "14px" }, optional: { color: "#667085", fontSize: "12px", fontWeight: 400 },
   input: { width: "100%", boxSizing: "border-box", marginTop: "7px", padding: "11px", border: "1px solid #d0d5dd", borderRadius: "8px", background: "#fff", fontSize: "14px" },
@@ -438,7 +440,7 @@ const styles = {
   empty: { padding: "20px", textAlign: "center", color: "#667085", background: "#f8fafc", borderRadius: "8px" }, tableWrap: { overflowX: "auto" }, table: { width: "100%", borderCollapse: "collapse", minWidth: "700px" },
   th: { textAlign: "left", padding: "11px", background: "#f8fafc", borderBottom: "1px solid #e4e7ec", fontSize: "12px" }, td: { padding: "11px", borderBottom: "1px solid #eaecf0", fontSize: "13px" },
   remove: { border: "none", background: "#dc2626", color: "#fff", padding: "7px 10px", borderRadius: "6px", cursor: "pointer", fontSize: "12px" },
-  totalCard: { background: "#fff", border: "1px solid #e4e7ec", borderRadius: "14px", padding: "22px", marginBottom: "30px" }, totalRow: { display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #eaecf0" }, balanceRow: { display: "flex", justifyContent: "space-between", padding: "15px 0", fontSize: "19px" },
+  totalCard: { background: "#fff", border: "1px solid #dce6f0", borderRadius: "16px", padding: "22px", marginBottom: "30px", boxShadow: "0 8px 22px rgba(28,50,80,.05)" }, totalsCard: { borderTop: "4px solid #16a34a" }, totalRow: { display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #eaecf0" }, balanceRow: { display: "flex", justifyContent: "space-between", padding: "15px 0", fontSize: "19px" },
   genericRow: { maxWidth: "380px", margin: "2px 0 3px", padding: "11px 13px", background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: "9px" },
   invoiceDiscountControl: { margin: "0 0 12px", padding: "13px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "9px", maxWidth: "410px" }, invoiceDiscountInput: { width: "100%", boxSizing: "border-box", marginTop: "7px", padding: "10px 11px", border: "1px solid #f5c66b", borderRadius: "8px", background: "#fff", fontSize: "14px" },
   commissionRow: { display: "flex", justifyContent: "space-between", padding: "10px 0", color: "#7c3aed", borderTop: "1px solid #eaecf0" },
