@@ -327,9 +327,6 @@ export default function SalesPage() {
             <label style={styles.label}>Sale Date
               <input type="date" value={saleDate} onChange={(e) => setSaleDate(e.target.value)} style={styles.input} />
             </label>
-            <label style={styles.label}>Received Amount
-              <input type="number" value={receivedAmount} onChange={(e) => setReceivedAmount(e.target.value)} style={styles.input} placeholder="0" min="0" />
-            </label>
           </div>
           <label style={styles.label}>Notes
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} style={styles.textarea} rows={3} placeholder="Optional sale notes" />
@@ -412,6 +409,7 @@ export default function SalesPage() {
           <div style={styles.totalRow}><span>Product Line Subtotal</span><strong>Rs. {itemSubtotal.toLocaleString("en-PK", { maximumFractionDigits: 4 })}</strong></div>
           {invoiceDiscountRate > 0 && <div style={styles.invoiceDiscountRow}><span>Full Invoice Discount ({invoiceDiscountRate}%)</span><strong>− Rs. {invoiceDiscountAmount.toLocaleString("en-PK", { maximumFractionDigits: 4 })}</strong></div>}
           <div style={styles.totalRow}><span>Grand Total</span><strong>Rs. {total.toLocaleString("en-PK", { maximumFractionDigits: 4 })}</strong></div>
+          <div style={styles.receivedControl}><label style={{ ...styles.label, marginBottom: 0 }}>Received Amount <span style={styles.optional}>(enter after final invoice total)</span><input type="number" value={receivedAmount} onChange={(e) => setReceivedAmount(e.target.value)} style={styles.invoiceDiscountInput} placeholder="0" min="0" max={total} /></label></div>
           <div style={styles.totalRow}><span>Received Amount</span><strong>Rs. {received.toLocaleString()}</strong></div>
           <div style={styles.balanceRow}><span>Customer Receivable</span><strong>Rs. {receivable.toLocaleString()}</strong></div>
           {applyCommission && <div style={styles.commissionRow}><span>Commission (TP basis)</span><strong>Rs. {commissionTotal.toLocaleString()}</strong></div>}
@@ -442,7 +440,7 @@ const styles = {
   remove: { border: "none", background: "#dc2626", color: "#fff", padding: "7px 10px", borderRadius: "6px", cursor: "pointer", fontSize: "12px" },
   totalCard: { background: "#fff", border: "1px solid #dce6f0", borderRadius: "16px", padding: "22px", marginBottom: "30px", boxShadow: "0 8px 22px rgba(28,50,80,.05)" }, totalsCard: { borderTop: "4px solid #16a34a" }, totalRow: { display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #eaecf0" }, balanceRow: { display: "flex", justifyContent: "space-between", padding: "15px 0", fontSize: "19px" },
   genericRow: { maxWidth: "380px", margin: "2px 0 3px", padding: "11px 13px", background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: "9px" },
-  invoiceDiscountControl: { margin: "0 0 12px", padding: "13px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "9px", maxWidth: "410px" }, invoiceDiscountInput: { width: "100%", boxSizing: "border-box", marginTop: "7px", padding: "10px 11px", border: "1px solid #f5c66b", borderRadius: "8px", background: "#fff", fontSize: "14px" },
+  invoiceDiscountControl: { margin: "0 0 12px", padding: "13px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "9px", maxWidth: "410px" }, receivedControl: { margin: "12px 0", padding: "13px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "9px", maxWidth: "410px" }, invoiceDiscountInput: { width: "100%", boxSizing: "border-box", marginTop: "7px", padding: "10px 11px", border: "1px solid #f5c66b", borderRadius: "8px", background: "#fff", fontSize: "14px" },
   commissionRow: { display: "flex", justifyContent: "space-between", padding: "10px 0", color: "#7c3aed", borderTop: "1px solid #eaecf0" },
   invoiceDiscountRow: { display: "flex", justifyContent: "space-between", padding: "10px 0", color: "#b45309", borderBottom: "1px solid #eaecf0" },
   saveButton: { width: "100%", border: "none", background: "#16a34a", color: "#fff", padding: "14px", borderRadius: "9px", cursor: "pointer", fontWeight: "700", fontSize: "16px", marginTop: "18px" },
