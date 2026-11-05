@@ -224,6 +224,12 @@ export default function CustomersPage() {
     return type.charAt(0).toUpperCase() + type.slice(1);
   }
 
+  function commissionLabel(customer) {
+    const holder = commissionHolders.find((item) => item.id === customer.commission_holder_id);
+    if (!holder || !Number(customer.commission_percent || 0)) return null;
+    return `${holder.name} · ${Number(customer.commission_percent).toFixed(2)}% on TP`;
+  }
+
   const filteredCustomers = customers.filter((customer) => {
     const text = `
       ${customer.name || ""}
@@ -240,7 +246,7 @@ export default function CustomersPage() {
     <main
       style={{
         minHeight: "100vh",
-        background: "#f3f4f6",
+        background: "linear-gradient(135deg, #f3f7fc 0%, #f8fafc 55%, #edf7f3 100%)",
         fontFamily: "Arial, sans-serif",
         padding: "20px",
         boxSizing: "border-box",
@@ -248,14 +254,16 @@ export default function CustomersPage() {
     >
       <div
         style={{
-          background: "#111827",
+          background: "linear-gradient(110deg, #102f54, #0f766e)",
           color: "#fff",
-          padding: "18px 20px",
-          borderRadius: "10px",
+          padding: "24px 26px",
+          borderRadius: "16px",
           marginBottom: "20px",
+          boxShadow: "0 12px 28px rgba(15, 54, 83, .16)",
         }}
       >
-        <h1 style={{ margin: 0 }}>🏥 Customers</h1>
+        <span style={{ fontSize: "11px", fontWeight: 800, letterSpacing: "1.2px", color: "#bfe8dd" }}>CUSTOMER MASTER</span>
+        <h1 style={{ margin: "7px 0 0", fontSize: "30px" }}>Customers</h1>
 
         <p
           style={{
@@ -264,7 +272,7 @@ export default function CustomersPage() {
             fontSize: "14px",
           }}
         >
-          Hospital, Clinic, Pharmacy, Doctor & Customer Master
+          Customer profiles, credit limits aur default commission settings manage karein.
         </p>
       </div>
 
@@ -277,9 +285,10 @@ export default function CustomersPage() {
           background: "#fff",
           color: "#111827",
           textDecoration: "none",
-          borderRadius: "7px",
-          border: "1px solid #ddd",
+          borderRadius: "9px",
+          border: "1px solid #dbe5f0",
           fontWeight: "bold",
+          boxShadow: "0 2px 5px rgba(15,23,42,.05)",
         }}
       >
         ← Dashboard
@@ -289,8 +298,9 @@ export default function CustomersPage() {
         style={{
           background: "#fff",
           padding: "20px",
-          borderRadius: "10px",
-          border: "1px solid #e5e7eb",
+          borderRadius: "16px",
+          border: "1px solid #dce6f0",
+          boxShadow: "0 8px 22px rgba(28,50,80,.05)",
           marginBottom: "20px",
         }}
       >
@@ -505,8 +515,9 @@ export default function CustomersPage() {
         style={{
           background: "#fff",
           padding: "20px",
-          borderRadius: "10px",
-          border: "1px solid #e5e7eb",
+          borderRadius: "16px",
+          border: "1px solid #dce6f0",
+          boxShadow: "0 8px 22px rgba(28,50,80,.05)",
         }}
       >
         <div
@@ -518,7 +529,7 @@ export default function CustomersPage() {
             marginBottom: "15px",
           }}
         >
-          <h2 style={{ margin: 0 }}>Customer List</h2>
+          <div><h2 style={{ margin: 0 }}>Customer List</h2><p style={{ margin: "5px 0 0", color: "#667085", fontSize: "14px" }}>{filteredCustomers.length} customer record{filteredCustomers.length === 1 ? "" : "s"} · commission setup is shown with holder and TP rate</p></div>
 
           <input
             value={search}
@@ -550,30 +561,27 @@ export default function CustomersPage() {
               }}
             >
               <thead>
-                <tr style={{ background: "#f3f4f6" }}>
+                <tr style={{ background: "#eaf0f8" }}>
                   <th style={thStyle}>Customer</th>
                   <th style={thStyle}>Type</th>
                   <th style={thStyle}>Contact Person</th>
                   <th style={thStyle}>Phone</th>
                   <th style={thStyle}>City</th>
                   <th style={thStyle}>Credit Limit</th>
-                  <th style={thStyle}>Commission</th>
+                  <th style={thStyle}>Commission Setup</th>
                   <th style={thStyle}>Actions</th>
                 </tr>
               </thead>
 
               <tbody>
                 {filteredCustomers.map((customer) => (
-                  <tr key={customer.id}>
+                  <tr key={customer.id} style={{ background: "#fff" }}>
                     <td style={tdStyle}>
-                      <strong>{customer.name}</strong>
+                      <strong style={{ color: "#172033" }}>{customer.name}</strong>
+                      {customer.address && <div style={{ marginTop: "4px", color: "#667085", fontSize: "12px", lineHeight: 1.35 }}>{customer.address.split("\n")[0]}</div>}
                     </td>
 
-                    <td style={tdStyle}>{customer.commission_enabled_default ? `${Number(customer.commission_percent || 0).toFixed(2)}% on TP` : "Not default"}</td>
-
-                    <td style={tdStyle}>
-                      {displayType(customer.customer_type)}
-                    </td>
+                    <td style={tdStyle}><span style={{ ...badgeStyle, background: "#eef2ff", color: "#3730a3" }}>{displayType(customer.customer_type)}</span></td>
 
                     <td style={tdStyle}>
                       {customer.contact_person || "-"}
@@ -588,13 +596,14 @@ export default function CustomersPage() {
                     </td>
 
                     <td style={tdStyle}>
-                      Rs.{" "}
-                      {Number(
-                        customer.credit_limit || 0
-                      ).toFixed(2)}
+                      <strong>Rs. {Number(customer.credit_limit || 0).toLocaleString("en-PK", { maximumFractionDigits: 2 })}</strong>
                     </td>
 
                     <td style={tdStyle}>
+                      {commissionLabel(customer) ? <div><strong style={{ color: "#0f766e", fontSize: "13px" }}>{commissionLabel(customer)}</strong><div style={{ marginTop: "5px" }}><span style={{ ...badgeStyle, background: customer.commission_enabled_default ? "#dcfce7" : "#fef3c7", color: customer.commission_enabled_default ? "#166534" : "#92400e" }}>{customer.commission_enabled_default ? "Default on invoices" : "Optional on invoice"}</span></div></div> : <span style={{ color: "#98a2b3" }}>No commission configured</span>}
+                    </td>
+
+                    <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
                       <button
                         onClick={() =>
                           editCustomer(customer)
@@ -644,14 +653,14 @@ const labelStyle = {
   marginBottom: "6px",
   fontSize: "14px",
   fontWeight: "bold",
-  color: "#374151",
+  color: "#344054",
 };
 
 const inputStyle = {
   width: "100%",
   padding: "11px",
-  border: "1px solid #d1d5db",
-  borderRadius: "7px",
+  border: "1px solid #cbd5e1",
+  borderRadius: "9px",
   boxSizing: "border-box",
   background: "#fff",
 };
@@ -661,20 +670,32 @@ const buttonStyle = {
   background: "#111827",
   color: "#fff",
   border: "none",
-  borderRadius: "7px",
+  borderRadius: "9px",
   cursor: "pointer",
   fontWeight: "bold",
 };
 
 const thStyle = {
-  padding: "12px",
+  padding: "13px 12px",
   textAlign: "left",
-  borderBottom: "1px solid #ddd",
+  borderBottom: "2px solid #cbd5e1",
   fontSize: "13px",
+  color: "#183b63",
+  whiteSpace: "nowrap",
 };
 
 const tdStyle = {
-  padding: "12px",
-  borderBottom: "1px solid #eee",
+  padding: "14px 12px",
+  borderBottom: "1px solid #e2e8f0",
   fontSize: "14px",
+  color: "#344054",
+  verticalAlign: "middle",
+};
+
+const badgeStyle = {
+  display: "inline-block",
+  padding: "4px 8px",
+  borderRadius: "999px",
+  fontSize: "11px",
+  fontWeight: 700,
 };
