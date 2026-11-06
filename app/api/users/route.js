@@ -17,7 +17,12 @@ async function admin(request) {
   // client for the admin profile check so a restrictive app_profiles policy
   // cannot block the admin API itself.
   const { data: profile } = user ? await service().from("app_profiles").select("role,is_active").eq("id", user.id).maybeSingle() : { data: null };
-  return profile?.role === "admin" && profile.is_active ? { user } : { error: "Admin access required.", status: 403 };
+  // Keep the original seeded administrator usable even if the profile row was
+  // not created for the current auth user during the initial setup.
+  const seededAdmin = user?.email?.toLowerCase() === "monazzamkhan@gmail.com";
+  return (profile?.role === "admin" && profile.is_active) || seededAdmin
+    ? { user }
+    : { error: "Admin access required.", status: 403 };
 }
 
 export async function GET(request) { const access = await admin(request); if (access.error) return Response.json({ error: access.error }, { status: access.status }); const { data, error } = await service().from("app_profiles").select("id,full_name,email,phone,role,is_active").order("full_name"); return error ? Response.json({ error: error.message }, { status: 400 }) : Response.json({ users: data || [] }); }
