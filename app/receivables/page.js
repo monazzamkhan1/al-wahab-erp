@@ -24,7 +24,7 @@ export default function ReceivablesPage() {
       supabase.from("sales").select("id,customer_id,invoice_no,invoice_date,total_amount,received_amount,created_at").order("invoice_date", { ascending: false }),
       supabase.from("customers").select("id,name"),
       supabase.from("stock_returns").select("sale_id,return_amount"),
-      supabase.from("customer_payments").select("sale_id,amount"),
+      supabase.from("customer_payments").select("customer_id,sale_id,amount"),
     ]);
     const loadError = [salesResult, customersResult, returnsResult, paymentsResult].find((result) => result.error)?.error;
     if (loadError) setError(`Receivables load nahi ho sake: ${loadError.message}`);

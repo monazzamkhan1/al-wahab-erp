@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
+import { reconcileInvoices } from "../lib/reconciliation";
 
 const money = (value) => `Rs. ${Number(value || 0).toLocaleString("en-PK")}`;
 
@@ -10,22 +11,22 @@ export default function AccountsPage() {
   const [error, setError] = useState("");
   async function load() {
     setError("");
-    const [dashboard, purchases, supplierPayments, sales, customerPayments] = await Promise.all([
+    const [dashboard, purchases, supplierPayments, supplierReturns, sales, customerPayments, customerReturns] = await Promise.all([
       supabase.rpc("get_dashboard_metrics").single(),
-      supabase.from("purchases").select("supplier_id,total_amount,paid_amount"),
-      supabase.from("supplier_payments").select("supplier_id,amount"),
-      supabase.from("sales").select("customer_id,total_amount,received_amount"),
-      supabase.from("customer_payments").select("customer_id,amount"),
+      supabase.from("purchases").select("id,supplier_id,total_amount,paid_amount"),
+      supabase.from("supplier_payments").select("supplier_id,purchase_id,amount"),
+      supabase.from("supplier_stock_returns").select("supplier_id,purchase_id,return_amount"),
+      supabase.from("sales").select("id,customer_id,total_amount,received_amount"),
+      supabase.from("customer_payments").select("customer_id,sale_id,amount"),
+      supabase.from("stock_returns").select("sale_id,return_amount"),
     ]);
-    const loadError = dashboard.error || purchases.error || supplierPayments.error || sales.error || customerPayments.error;
+    const loadError = dashboard.error || purchases.error || supplierPayments.error || supplierReturns.error || sales.error || customerPayments.error || customerReturns.error;
     if (loadError) { setError(loadError.message); return; }
-    const netOutstanding = (invoices, payments, partyKey, settledKey) => {
-      const balances = new Map();
-      invoices.forEach((row) => balances.set(row[partyKey], (balances.get(row[partyKey]) || 0) + Number(row.total_amount || 0) - Number(row[settledKey] || 0)));
-      payments.forEach((row) => balances.set(row[partyKey], (balances.get(row[partyKey]) || 0) - Number(row.amount || 0)));
-      return [...balances.values()].reduce((sum, balance) => sum + Math.max(balance, 0), 0);
-    };
-    setMetrics({ ...dashboard.data, payables: netOutstanding(purchases.data || [], supplierPayments.data || [], "supplier_id", "paid_amount"), receivables: netOutstanding(sales.data || [], customerPayments.data || [], "customer_id", "received_amount") });
+    const returnsBySale = (customerReturns.data || []).reduce((map, row) => { map[row.sale_id] = Number(map[row.sale_id] || 0) + Number(row.return_amount || 0); return map; }, {});
+    const returnsByPurchase = (supplierReturns.data || []).reduce((map, row) => { if (row.purchase_id) map[row.purchase_id] = Number(map[row.purchase_id] || 0) + Number(row.return_amount || 0); return map; }, {});
+    const { rows: saleRows } = reconcileInvoices((sales.data || []).map((row) => ({ ...row, adjustment: returnsBySale[row.id] || 0 })), { partyKey: "customer_id", initialKey: "received_amount", directCredits: (customerPayments.data || []).map((row) => ({ partyId: row.customer_id, invoiceId: row.sale_id, amount: row.amount })) });
+    const { rows: purchaseRows } = reconcileInvoices((purchases.data || []).map((row) => ({ ...row, adjustment: returnsByPurchase[row.id] || 0 })), { partyKey: "supplier_id", initialKey: "paid_amount", directCredits: [...(supplierPayments.data || []).map((row) => ({ partyId: row.supplier_id, invoiceId: row.purchase_id, amount: row.amount })), ...(supplierReturns.data || []).filter((row) => !row.purchase_id).map((row) => ({ partyId: row.supplier_id, invoiceId: null, amount: row.return_amount }))] });
+    setMetrics({ ...dashboard.data, payables: purchaseRows.reduce((sum, row) => sum + Number(row.balance || 0), 0), receivables: saleRows.reduce((sum, row) => sum + Number(row.balance || 0), 0) });
   }
   useEffect(() => { load(); }, []);
   const cards = [

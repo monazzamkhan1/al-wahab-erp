@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Login from "./login";
 import { supabase } from "./supabase";
+import { reconcileInvoices } from "./lib/reconciliation";
 
 const money = (value) => `Rs. ${Number(value || 0).toLocaleString("en-PK")}`;
 const number = (value) => Number(value || 0).toLocaleString("en-PK");
@@ -25,26 +26,22 @@ export default function Home() {
     try {
       const { data, error: metricError } = await supabase.rpc("get_dashboard_metrics").single();
       if (metricError) throw metricError;
-      const [purchaseRows, supplierPayments, saleRows, customerPayments, returnRows] = await Promise.all([
-        supabase.from("purchases").select("supplier_id,total_amount,paid_amount"),
-        supabase.from("supplier_payments").select("supplier_id,amount"),
-        supabase.from("sales").select("customer_id,total_amount,received_amount"),
-        supabase.from("customer_payments").select("customer_id,amount"),
-        supabase.from("stock_returns").select("customer_id,return_amount"),
+      const [purchaseRows, supplierPayments, supplierReturns, saleRows, customerPayments, returnRows] = await Promise.all([
+        supabase.from("purchases").select("id,supplier_id,total_amount,paid_amount"),
+        supabase.from("supplier_payments").select("supplier_id,purchase_id,amount"),
+        supabase.from("supplier_stock_returns").select("supplier_id,purchase_id,return_amount"),
+        supabase.from("sales").select("id,customer_id,total_amount,received_amount"),
+        supabase.from("customer_payments").select("customer_id,sale_id,amount"),
+        supabase.from("stock_returns").select("customer_id,sale_id,return_amount"),
       ]);
-      const queryError = [purchaseRows, supplierPayments, saleRows, customerPayments, returnRows].find((row) => row.error)?.error;
+      const queryError = [purchaseRows, supplierPayments, supplierReturns, saleRows, customerPayments, returnRows].find((row) => row.error)?.error;
       if (queryError) throw queryError;
-      const returnsByCustomer = new Map();
-      (returnRows.data || []).forEach((row) => returnsByCustomer.set(row.customer_id, (returnsByCustomer.get(row.customer_id) || 0) + Number(row.return_amount || 0)));
-      const balance = (invoices, payments, partyKey, paidKey, adjustments = new Map()) => {
-        const values = new Map();
-        invoices.forEach((row) => values.set(row[partyKey], (values.get(row[partyKey]) || 0) + Number(row.total_amount || 0) - Number(row[paidKey] || 0)));
-        payments.forEach((row) => values.set(row[partyKey], (values.get(row[partyKey]) || 0) - Number(row.amount || 0)));
-        adjustments.forEach((amount, id) => values.set(id, (values.get(id) || 0) - amount));
-        return [...values.values()].reduce((sum, value) => sum + Math.max(value, 0), 0);
-      };
-      const returned = [...returnsByCustomer.values()].reduce((sum, value) => sum + value, 0);
-      setMetrics({ products:Number(data?.products||0), stock:Number(data?.stock||0), customers:Number(data?.customers||0), suppliers:Number(data?.suppliers||0), sales:Math.max(0,Number(data?.sales||0)-returned), purchases:Number(data?.purchases||0), receivables:balance(saleRows.data||[],customerPayments.data||[],"customer_id","received_amount",returnsByCustomer), payables:balance(purchaseRows.data||[],supplierPayments.data||[],"supplier_id","paid_amount") });
+      const salesReturns = (returnRows.data || []).reduce((map, row) => { map[row.sale_id] = Number(map[row.sale_id] || 0) + Number(row.return_amount || 0); return map; }, {});
+      const purchaseReturns = (supplierReturns.data || []).reduce((map, row) => { if (row.purchase_id) map[row.purchase_id] = Number(map[row.purchase_id] || 0) + Number(row.return_amount || 0); return map; }, {});
+      const { rows: reconciledSales } = reconcileInvoices((saleRows.data || []).map((row) => ({ ...row, adjustment: salesReturns[row.id] || 0 })), { partyKey: "customer_id", initialKey: "received_amount", directCredits: (customerPayments.data || []).map((row) => ({ partyId: row.customer_id, invoiceId: row.sale_id, amount: row.amount })) });
+      const { rows: reconciledPurchases } = reconcileInvoices((purchaseRows.data || []).map((row) => ({ ...row, adjustment: purchaseReturns[row.id] || 0 })), { partyKey: "supplier_id", initialKey: "paid_amount", directCredits: [...(supplierPayments.data || []).map((row) => ({ partyId: row.supplier_id, invoiceId: row.purchase_id, amount: row.amount })), ...(supplierReturns.data || []).filter((row) => !row.purchase_id).map((row) => ({ partyId: row.supplier_id, invoiceId: null, amount: row.return_amount }))] });
+      const returned = Object.values(salesReturns).reduce((sum, value) => sum + Number(value || 0), 0);
+      setMetrics({ products:Number(data?.products||0), stock:Number(data?.stock||0), customers:Number(data?.customers||0), suppliers:Number(data?.suppliers||0), sales:Math.max(0,Number(data?.sales||0)-returned), purchases:Number(data?.purchases||0), receivables:reconciledSales.reduce((sum, row) => sum + Number(row.balance || 0), 0), payables:reconciledPurchases.reduce((sum, row) => sum + Number(row.balance || 0), 0) });
     } catch (loadError) { console.error(loadError); setError("Dashboard data load nahi ho saka. Please try again."); }
     finally { setDataLoading(false); }
   }
