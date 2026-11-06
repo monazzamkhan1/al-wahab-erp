@@ -71,11 +71,21 @@ export default function ProductsPage() {
 
   const [editingId, setEditingId] = useState(null);
   const [message, setMessage] = useState("");
+  const [defaultTp, setDefaultTp] = useState("15");
 
   useEffect(() => {
     loadProducts();
     loadCompanies();
+    loadGlobalSettings();
   }, []);
+
+  async function loadGlobalSettings() {
+    const { data, error } = await supabase.from("erp_settings").select("default_tp_discount_percent").eq("id", true).maybeSingle();
+    if (error || !data) return;
+    const value = String(data.default_tp_discount_percent ?? 15);
+    setDefaultTp(value);
+    setForm((current) => current.product_name || current.tp_discount_percent !== "15" ? current : { ...current, tp_discount_percent: value });
+  }
 
   async function loadProducts() {
     setLoading(true);
@@ -140,7 +150,7 @@ export default function ProductsPage() {
       category: "",
       company_id: "",
       mrp: "",
-      tp_discount_percent: "15",
+      tp_discount_percent: defaultTp,
       is_milk_formula: false,
       purchase_rate: "",
       sale_rate: "",

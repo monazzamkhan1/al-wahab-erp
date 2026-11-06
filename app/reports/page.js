@@ -29,8 +29,10 @@ export default function ReportsPage() {
     }
     setLoading(true); setError("");
     const [saleResult, purchaseResult, customerPaymentResult, supplierPaymentResult, customerReturnResult, supplierReturnResult] = await Promise.all([
-      supabase.from("sales").select("id,customer_id,invoice_no,invoice_date,total_amount,received_amount,created_at").gte("invoice_date", fromDate).lte("invoice_date", toDate).order("invoice_date", { ascending: false }),
-      supabase.from("purchases").select("id,supplier_id,invoice_no,invoice_date,total_amount,paid_amount,created_at").gte("invoice_date", fromDate).lte("invoice_date", toDate).order("invoice_date", { ascending: false }),
+      // Reconcile against the complete history before applying the visible date range.
+      // Otherwise a payment that cleared an older invoice could be allocated again here.
+      supabase.from("sales").select("id,customer_id,invoice_no,invoice_date,total_amount,received_amount,created_at").order("invoice_date", { ascending: true }),
+      supabase.from("purchases").select("id,supplier_id,invoice_no,invoice_date,total_amount,paid_amount,created_at").order("invoice_date", { ascending: true }),
       supabase.from("customer_payments").select("customer_id,sale_id,amount"),
       supabase.from("supplier_payments").select("supplier_id,purchase_id,amount"),
       supabase.from("stock_returns").select("sale_id,return_amount"),
@@ -44,8 +46,11 @@ export default function ReportsPage() {
     }
     const customerReturnsBySale = (customerReturnResult.data || []).reduce((map, row) => { map[row.sale_id] = Number(map[row.sale_id] || 0) + Number(row.return_amount || 0); return map; }, {});
     const supplierReturnsByPurchase = (supplierReturnResult.data || []).reduce((map, row) => { if (row.purchase_id) map[row.purchase_id] = Number(map[row.purchase_id] || 0) + Number(row.return_amount || 0); return map; }, {});
-    const { rows: saleRows, advances: customerAdvances } = reconcileInvoices((saleResult.data || []).map((row) => ({ ...row, adjustment: customerReturnsBySale[row.id] || 0 })), { partyKey: "customer_id", initialKey: "received_amount", directCredits: (customerPaymentResult.data || []).map((row) => ({ partyId: row.customer_id, invoiceId: row.sale_id, amount: row.amount })) });
-    const { rows: purchaseRows, advances: supplierAdvances } = reconcileInvoices((purchaseResult.data || []).map((row) => ({ ...row, adjustment: supplierReturnsByPurchase[row.id] || 0 })), { partyKey: "supplier_id", initialKey: "paid_amount", directCredits: [...(supplierPaymentResult.data || []).map((row) => ({ partyId: row.supplier_id, invoiceId: row.purchase_id, amount: row.amount })), ...(supplierReturnResult.data || []).filter((row) => !row.purchase_id).map((row) => ({ partyId: row.supplier_id, invoiceId: null, amount: row.return_amount }))] });
+    const { rows: allSaleRows, advances: customerAdvances } = reconcileInvoices((saleResult.data || []).map((row) => ({ ...row, adjustment: customerReturnsBySale[row.id] || 0 })), { partyKey: "customer_id", initialKey: "received_amount", directCredits: (customerPaymentResult.data || []).map((row) => ({ partyId: row.customer_id, invoiceId: row.sale_id, amount: row.amount })) });
+    const { rows: allPurchaseRows, advances: supplierAdvances } = reconcileInvoices((purchaseResult.data || []).map((row) => ({ ...row, adjustment: supplierReturnsByPurchase[row.id] || 0 })), { partyKey: "supplier_id", initialKey: "paid_amount", directCredits: [...(supplierPaymentResult.data || []).map((row) => ({ partyId: row.supplier_id, invoiceId: row.purchase_id, amount: row.amount })), ...(supplierReturnResult.data || []).filter((row) => !row.purchase_id).map((row) => ({ partyId: row.supplier_id, invoiceId: null, amount: row.return_amount }))] });
+    const inSelectedRange = (row) => row.invoice_date >= fromDate && row.invoice_date <= toDate;
+    const saleRows = allSaleRows.filter(inSelectedRange).reverse();
+    const purchaseRows = allPurchaseRows.filter(inSelectedRange).reverse();
     setSales(saleRows); setPurchases(purchaseRows); setCustomerAdvance(customerAdvances); setSupplierAdvance(supplierAdvances);
     const customerIds = [...new Set(saleRows.map((row) => row.customer_id).filter(Boolean))];
     const supplierIds = [...new Set(purchaseRows.map((row) => row.supplier_id).filter(Boolean))];
