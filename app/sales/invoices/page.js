@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabase";
 import { reconcileInvoices } from "../../lib/reconciliation";
+import { canModifyRecord, staffWindowMessage } from "../../lib/access";
 
 const money = (value) => `Rs. ${Number(value || 0).toLocaleString("en-PK")}`;
 
@@ -36,6 +37,7 @@ export default function SalesInvoicesPage() {
     setItems(lineItems); setCustomers(Object.fromEntries((customerResult.data || []).map((row) => [row.id, row.name]))); setProducts(Object.fromEntries((productResult.data || []).map((row) => [row.id, row]))); setPurchaseByBatch(purchaseByBatch); setLoading(false);
   }
   async function deleteInvoice(invoice) {
+    if (!(await canModifyRecord(invoice.created_at))) { setError(staffWindowMessage()); return; }
     if (!window.confirm(`Delete sale invoice ${invoice.invoice_no}? Stock will be restored.`)) return;
     setError("");
     const { error: deleteError } = await supabase.rpc("delete_sale_with_stock", { p_sale_id: invoice.id });

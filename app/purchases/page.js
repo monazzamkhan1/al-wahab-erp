@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabase";
+import { canModifyRecord, staffWindowMessage } from "../lib/access";
 
 export default function PurchasesPage() {
   const [suppliers, setSuppliers] = useState([]);
@@ -277,6 +278,7 @@ export default function PurchasesPage() {
   }
 
   async function deletePurchase(purchase) {
+    if (!(await canModifyRecord(purchase.created_at))) { setMessage(staffWindowMessage()); return; }
     if (!window.confirm(`Delete purchase ${purchase.invoice_no}? Stock aur purchase record reverse ho jayega. Ye action tabhi chalega jab is stock mein se sale na hui ho.`)) return;
     setSaving(true); setMessage("");
     const { error } = await supabase.rpc("delete_purchase_with_stock", { p_purchase_id: purchase.id });
