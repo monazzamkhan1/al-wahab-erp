@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabase";
+import { reconcileInvoices } from "../lib/reconciliation";
 
 const money = (value) => `Rs. ${Number(value || 0).toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const today = new Date().toISOString().slice(0, 10);
@@ -12,22 +13,21 @@ export default function PayablesPage() {
   const [form, setForm] = useState({ amount: "", date: today, method: "cash", reference: "", notes: "" });
   async function loadPayables() {
     setLoading(true); setError("");
-    const [purchases, suppliers, payments] = await Promise.all([
-      supabase.from("purchases").select("id,supplier_id,invoice_no,invoice_date,total_amount,paid_amount").order("invoice_date", { ascending: false }),
+    const [purchases, suppliers, payments, returns] = await Promise.all([
+      supabase.from("purchases").select("id,supplier_id,invoice_no,invoice_date,total_amount,paid_amount,created_at").order("invoice_date", { ascending: false }),
       supabase.from("companies").select("id,name").in("company_type", ["supplier", "both"]),
       supabase.from("supplier_payments").select("supplier_id,purchase_id,amount"),
+      supabase.from("supplier_stock_returns").select("supplier_id,purchase_id,return_amount"),
     ]);
-    const loadError = [purchases, suppliers, payments].find((result) => result.error)?.error;
+    const loadError = [purchases, suppliers, payments, returns].find((result) => result.error)?.error;
     if (loadError) setError(`Payables load nahi ho sake: ${loadError.message}`);
     else {
       const supplierById = Object.fromEntries((suppliers.data || []).map((row) => [row.id, row.name]));
-      const paidByPurchase = (payments.data || []).reduce((map, row) => { if (row.purchase_id) map[row.purchase_id] = (map[row.purchase_id] || 0) + Number(row.amount || 0); return map; }, {});
-      const wholeSupplierPayments = (payments.data || []).reduce((map, row) => { if (!row.purchase_id) map[row.supplier_id] = (map[row.supplier_id] || 0) + Number(row.amount || 0); return map; }, {});
-      const allPurchases = (purchases.data || []).map((purchase) => ({ ...purchase, supplier_name: supplierById[purchase.supplier_id] || "Supplier", paid: Number(purchase.paid_amount || 0) + Number(paidByPurchase[purchase.id] || 0) })).sort((a, b) => String(a.invoice_date).localeCompare(String(b.invoice_date)));
-      const remainingSupplierPayments = { ...wholeSupplierPayments };
-      const reconciled = allPurchases.map((purchase) => { const before = Math.max(Number(purchase.total_amount || 0) - purchase.paid, 0); const available = Number(remainingSupplierPayments[purchase.supplier_id] || 0); const allocated = Math.min(before, available); remainingSupplierPayments[purchase.supplier_id] = available - allocated; return { ...purchase, paid: purchase.paid + allocated, balance: before - allocated }; });
+      const returnsByPurchase = (returns.data || []).reduce((map, row) => { if (row.purchase_id) map[row.purchase_id] = Number(map[row.purchase_id] || 0) + Number(row.return_amount || 0); return map; }, {});
+      const credits = [...(payments.data || []).map((row) => ({ partyId: row.supplier_id, invoiceId: row.purchase_id, amount: row.amount })), ...(returns.data || []).filter((row) => !row.purchase_id).map((row) => ({ partyId: row.supplier_id, invoiceId: null, amount: row.return_amount }))];
+      const { rows: reconciled, advances: advanceTotal } = reconcileInvoices((purchases.data || []).map((purchase) => ({ ...purchase, adjustment: returnsByPurchase[purchase.id] || 0, supplier_name: supplierById[purchase.supplier_id] || "Supplier" })), { partyKey: "supplier_id", initialKey: "paid_amount", directCredits: credits });
       setRows(reconciled.filter((purchase) => purchase.balance > 0.004));
-      setAdvances(Object.entries(remainingSupplierPayments).filter(([, amount]) => amount > 0.004).map(([supplier_id, amount]) => ({ supplier_id, supplier_name: supplierById[supplier_id] || "Supplier", amount })));
+      setAdvances(advanceTotal > 0.004 ? [{ supplier_id: "advance", supplier_name: "Unallocated Supplier Credit", amount: advanceTotal }] : []);
     }
     setLoading(false);
   }
@@ -56,7 +56,7 @@ export default function PayablesPage() {
     {error && <div style={s.error}>{error}<button onClick={loadPayables} style={s.retry}>Retry</button></div>}{message && <div style={s.success}>{message}</div>}
     <section style={s.summary}><article style={s.totalCard}><span>💸 Total Payable</span><strong>{money(total)}</strong><small>Outstanding after all supplier payments</small></article><article style={s.advanceCard}><span>✅ Supplier Advance</span><strong>{money(totalAdvance)}</strong><small>Extra whole-supplier payments / credit</small></article><article style={s.infoCard}><span>📄 Outstanding Purchases</span><strong>{rows.length}</strong><small>Invoice-wise payment follow-up</small></article><article style={s.infoCard}><span>🏭 Suppliers Due</span><strong>{suppliers}</strong><small>Parties with pending balance</small></article></section>
     {selected && <section style={s.paymentCard}><div style={s.paymentHeader}><div><p style={s.eyebrow}>SEND PAYMENT</p><h2 style={s.h2}>{selected.supplier_name}</h2><p style={s.sub}>{selected.invoice_no} · Remaining {money(selected.balance)}</p></div><button onClick={() => setSelected(null)} style={s.close}>×</button></div><form onSubmit={sendPayment} style={s.formGrid}><label>Amount *<input required min="0.01" max={selected.balance} step="0.01" type="number" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })}/></label><label>Date *<input required type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })}/></label><label>Payment Method<select value={form.method} onChange={(event) => setForm({ ...form, method: event.target.value })}>{Object.entries(methods).map(([key,label]) => <option key={key} value={key}>{label}</option>)}</select></label><label>Reference / Cheque No.<input value={form.reference} onChange={(event) => setForm({ ...form, reference: event.target.value })} placeholder="Optional"/></label><label style={s.notes}>Narration / Notes<input value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="Optional payment detail"/></label><button disabled={saving} style={s.save}>{saving ? "Saving..." : "Send Payment"}</button></form></section>}
-    <section style={s.card}><div style={s.tableHead}><div><h2 style={s.h2}>Outstanding Purchase Invoices</h2><p style={s.sub}>Purchase invoice select karke usi ke against payment send karein.</p></div><span style={s.badge}>{rows.length} pending</span></div>{loading ? <p>Loading payables...</p> : !rows.length ? <div style={s.empty}>✓ Koi outstanding purchase invoice nahi hai.</div> : <div style={s.scroll}><table style={s.table}><thead><tr><th>Date</th><th>Purchase Invoice</th><th>Supplier</th><th>Purchase</th><th>Paid</th><th>Balance</th><th></th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.invoice_date}</td><td><b>{row.invoice_no}</b></td><td>{row.supplier_name}</td><td>{money(row.total_amount)}</td><td>{money(row.paid)}</td><td style={s.balance}>{money(row.balance)}</td><td><button onClick={() => openPayment(row)} style={s.send}>Send Payment</button></td></tr>)}</tbody></table></div>}</section>{advances.length > 0 && <section style={s.advanceList}><h2 style={s.h2}>Supplier Advance / Credit</h2>{advances.map((row) => <div key={row.supplier_id} style={s.advanceRow}><span>{row.supplier_name}</span><b>{money(row.amount)}</b></div>)}</section>}
+    <section style={s.card}><div style={s.tableHead}><div><h2 style={s.h2}>Outstanding Purchase Invoices</h2><p style={s.sub}>Purchase invoice select karke usi ke against payment send karein.</p></div><span style={s.badge}>{rows.length} pending</span></div>{loading ? <p>Loading payables...</p> : !rows.length ? <div style={s.empty}>✓ Koi outstanding purchase invoice nahi hai.</div> : <div style={s.scroll}><table style={s.table}><thead><tr><th>Date</th><th>Purchase Invoice</th><th>Supplier</th><th>Purchase</th><th>Return Credit</th><th>Paid</th><th>Balance</th><th></th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.invoice_date}</td><td><b>{row.invoice_no}</b></td><td>{row.supplier_name}</td><td>{money(row.total_amount)}</td><td>{money(row.adjustment)}</td><td>{money(row.paid)}</td><td style={s.balance}>{money(row.balance)}</td><td><button onClick={() => openPayment(row)} style={s.send}>Send Payment</button></td></tr>)}</tbody></table></div>}</section>{advances.length > 0 && <section style={s.advanceList}><h2 style={s.h2}>Supplier Advance / Credit</h2>{advances.map((row) => <div key={row.supplier_id} style={s.advanceRow}><span>{row.supplier_name}</span><b>{money(row.amount)}</b></div>)}</section>}
   </div></main>;
 }
 

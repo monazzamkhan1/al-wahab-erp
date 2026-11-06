@@ -24,7 +24,7 @@ export default function SupplierStockReturnsPage() {
     const [supplierResult, productResult, returnResult] = await Promise.all([
       supabase.from("companies").select("id,name").in("company_type", ["supplier", "both"]).order("name"),
       supabase.from("products").select("id,product_name,product_code,pack_size").eq("is_active", true).order("product_name"),
-      supabase.from("supplier_stock_returns").select("id,supplier_id,product_id,batch_id,quantity,return_date,reference_no,notes").order("return_date", { ascending: false }).limit(50),
+      supabase.from("supplier_stock_returns").select("id,supplier_id,product_id,batch_id,quantity,return_date,reference_no,notes,unit_rate,return_amount").order("return_date", { ascending: false }).limit(50),
     ]);
     if (supplierResult.error || productResult.error || returnResult.error) setMessage("Supplier returns load nahi ho sake: " + (supplierResult.error || productResult.error || returnResult.error).message);
     else { setSuppliers(supplierResult.data || []); setProducts(productResult.data || []); setReturns(returnResult.data || []); }
@@ -62,7 +62,7 @@ export default function SupplierStockReturnsPage() {
       if (!auth.user) throw new Error("User login nahi hai.");
       const { error } = await supabase.rpc("save_supplier_stock_return", { p_supplier_id: form.supplierId, p_product_id: form.productId, p_batch_id: form.batchId, p_quantity: Number(form.quantity), p_return_date: form.date, p_reference_no: form.reference, p_notes: form.notes, p_created_by: auth.user.id });
       if (error) throw error;
-      setMessage("Supplier return save ho gaya aur stock selected batch se minus ho gaya.");
+      setMessage("Supplier return save ho gaya: stock kam aur supplier credit note ledger mein add ho gaya.");
       setForm({ supplierId: "", productId: "", batchId: "", quantity: "", date: new Date().toISOString().slice(0, 10), reference: "", notes: "" }); setSupplierSearch(""); setProductSearch(""); setBatchSearch(""); setBatches([]);
       await loadData();
     } catch (saveError) { setMessage("Supplier return save nahi ho saka: " + saveError.message); }
@@ -84,7 +84,7 @@ export default function SupplierStockReturnsPage() {
       <label style={s.label}>Reason / Notes<input value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} style={s.input} placeholder="Expiry, damage, wrong item etc."/></label>
       <button disabled={saving} style={s.save}>{saving ? "Saving..." : "Save Return & Reduce Stock"}</button>
     </form></section>
-    <section style={s.card}><div style={s.cardHead}><div><h2 style={s.h2}>Recent Supplier Returns</h2><p style={s.cardSub}>Latest stock sent back to suppliers.</p></div></div>{loading ? <p>Loading...</p> : !returns.length ? <p style={s.sub}>Abhi koi supplier return record nahi hai.</p> : <div style={s.scroll}><table className="returnTable" style={s.table}><thead><tr><th>Date</th><th>Supplier</th><th>Product</th><th>Qty</th><th>Reference</th><th>Notes</th></tr></thead><tbody>{returns.map((row) => <tr key={row.id}><td>{row.return_date}</td><td>{supplierName(row.supplier_id)}</td><td>{productName(row.product_id)}</td><td><strong>{row.quantity}</strong></td><td>{row.reference_no || "-"}</td><td>{row.notes || "-"}</td></tr>)}</tbody></table></div>}</section>
+    <section style={s.card}><div style={s.cardHead}><div><h2 style={s.h2}>Recent Supplier Returns</h2><p style={s.cardSub}>Latest stock sent back to suppliers with supplier credit value.</p></div></div>{loading ? <p>Loading...</p> : !returns.length ? <p style={s.sub}>Abhi koi supplier return record nahi hai.</p> : <div style={s.scroll}><table className="returnTable" style={s.table}><thead><tr><th>Date</th><th>Supplier</th><th>Product</th><th>Qty</th><th>Credit</th><th>Reference</th><th>Notes</th></tr></thead><tbody>{returns.map((row) => <tr key={row.id}><td>{row.return_date}</td><td>{supplierName(row.supplier_id)}</td><td>{productName(row.product_id)}</td><td><strong>{row.quantity}</strong></td><td>Rs. {Number(row.return_amount || 0).toLocaleString("en-PK", { minimumFractionDigits: 2 })}</td><td>{row.reference_no || "-"}</td><td>{row.notes || "-"}</td></tr>)}</tbody></table></div>}</section>
   </div></main>;
 }
 
