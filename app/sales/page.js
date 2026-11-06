@@ -382,13 +382,13 @@ export default function SalesPage() {
           </div>
           <div style={styles.grid}>
             <label style={styles.label}>Sale Rate (Before Discount) *
-              <input type="number" value={saleRate} onChange={(e) => setSaleRate(e.target.value)} style={styles.input} min="0" />
+              <input type="number" value={saleRate} onChange={(e) => setSaleRate(e.target.value)} style={styles.input} min="0" step="any" />
             </label>
             <label style={styles.label}>Discount %
               <input type="number" value={discount} onChange={(e) => setDiscount(e.target.value)} style={styles.input} min="0" max="100" step="0.01" placeholder="0" />
             </label>
             <label style={styles.label}>Tax
-              <input type="number" value={tax} onChange={(e) => setTax(e.target.value)} style={styles.input} min="0" />
+              <input type="number" value={tax} onChange={(e) => setTax(e.target.value)} style={styles.input} min="0" step="any" />
             </label>
           </div>
           <div style={styles.lineTotal}><span><b>Net Rate:</b> Rs. {netSaleRate.toLocaleString("en-PK", { maximumFractionDigits: 4 })} {discountPercent > 0 && <small style={{ color: "#667085" }}> · Discount: Rs. {discountValue.toLocaleString("en-PK", { maximumFractionDigits: 4 })}</small>}</span><strong>Current Line Amount: Rs. {lineAmount.toLocaleString("en-PK", { maximumFractionDigits: 4 })}</strong></div>
@@ -409,7 +409,7 @@ export default function SalesPage() {
           <div style={styles.totalRow}><span>Product Line Subtotal</span><strong>Rs. {itemSubtotal.toLocaleString("en-PK", { maximumFractionDigits: 4 })}</strong></div>
           {invoiceDiscountRate > 0 && <div style={styles.invoiceDiscountRow}><span>Full Invoice Discount ({invoiceDiscountRate}%)</span><strong>− Rs. {invoiceDiscountAmount.toLocaleString("en-PK", { maximumFractionDigits: 4 })}</strong></div>}
           <div style={styles.totalRow}><span>Grand Total</span><strong>Rs. {total.toLocaleString("en-PK", { maximumFractionDigits: 4 })}</strong></div>
-          <div style={styles.receivedControl}><label style={{ ...styles.label, marginBottom: 0 }}>Received Amount <span style={styles.optional}>(enter after final invoice total)</span><input type="number" value={receivedAmount} onChange={(e) => setReceivedAmount(e.target.value)} style={styles.invoiceDiscountInput} placeholder="0" min="0" max={total} /></label></div>
+          <div style={styles.receivedControl}><label style={{ ...styles.label, marginBottom: 0 }}>Received Amount <span style={styles.optional}>(enter after final invoice total)</span><input type="number" value={receivedAmount} onChange={(e) => setReceivedAmount(e.target.value)} style={styles.invoiceDiscountInput} placeholder="0" min="0" max={total} step="any" /></label></div>
           <div style={styles.totalRow}><span>Received Amount</span><strong>Rs. {received.toLocaleString()}</strong></div>
           <div style={styles.balanceRow}><span>Customer Receivable</span><strong>Rs. {receivable.toLocaleString()}</strong></div>
           {applyCommission && <div style={styles.commissionRow}><span>Commission (TP basis)</span><strong>Rs. {commissionTotal.toLocaleString()}</strong></div>}
