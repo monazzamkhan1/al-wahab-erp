@@ -11,7 +11,10 @@ async function admin(request) {
   if (!configured()) return { error: "User management service is not configured.", status: 503 };
   const client = createClient(url, anonKey, { global: { headers: { Authorization: `Bearer ${token}` } } });
   const { data: { user } } = await client.auth.getUser();
-  const { data: profile } = user ? await client.from("app_profiles").select("role,is_active").eq("id", user.id).maybeSingle() : { data: null };
+  // The authenticated client is intentionally subject to RLS. Use the service
+  // client for the admin profile check so a restrictive app_profiles policy
+  // cannot block the admin API itself.
+  const { data: profile } = user ? await service().from("app_profiles").select("role,is_active").eq("id", user.id).maybeSingle() : { data: null };
   return profile?.role === "admin" && profile.is_active ? { user } : { error: "Admin access required.", status: 403 };
 }
 
