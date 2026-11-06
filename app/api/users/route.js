@@ -9,8 +9,10 @@ const service = () => createClient(url, serviceKey, { auth: { autoRefreshToken: 
 async function admin(request) {
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   if (!configured()) return { error: "User management service is not configured.", status: 503 };
-  const client = createClient(url, anonKey, { global: { headers: { Authorization: `Bearer ${token}` } } });
-  const { data: { user } } = await client.auth.getUser();
+  // Verify the bearer token with the same Supabase project service client.
+  // Using the publishable client here can return a false 403 when the public
+  // key was rotated or the deployment has a different key configured.
+  const { data: { user } = {} } = await service().auth.getUser(token);
   // The authenticated client is intentionally subject to RLS. Use the service
   // client for the admin profile check so a restrictive app_profiles policy
   // cannot block the admin API itself.
