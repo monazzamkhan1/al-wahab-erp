@@ -27,6 +27,7 @@ as $$ select coalesce(public.current_erp_role() = 'admin', false) $$;
 alter table public.app_profiles enable row level security;
 drop policy if exists "Users can read own profile" on public.app_profiles;
 create policy "Users can read own profile" on public.app_profiles for select to authenticated using (id = auth.uid() or public.is_erp_admin());
+grant usage on schema public to authenticated;
 grant select on public.app_profiles to authenticated;
 grant execute on function public.current_erp_role() to authenticated;
 grant execute on function public.is_erp_admin() to authenticated;
