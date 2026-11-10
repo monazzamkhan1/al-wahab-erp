@@ -92,6 +92,7 @@ export default function ProductsPage() {
 
     const { data, error } = await supabase
       .from("products")
+      .neq("import_source", "legacy_zip_invoice")
       .select(`
         *,
         companies!products_company_id_fkey (
