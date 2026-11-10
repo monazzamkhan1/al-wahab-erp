@@ -460,7 +460,7 @@ export default function ProductsPage() {
                 onChange={handleChange}
                 required
                 placeholder="Enter product name"
-                style={inputSty>Sale/TP</th>le}
+                style={inputSt>Sale/TP</th>>Sale/TP</th>le}
               />
             </div>
 
