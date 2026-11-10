@@ -794,7 +794,7 @@ export default function ProductsPage() {
                   <th style={thStyle}>Purchase</th>
                   <th style={thStyle}>MRP</th>
                   <th style={thStyle}>TP Rule</th>
-                  <th style={thStyle}>Sale</th>
+                  <th style={thStyle}>Sale/TP</th>
                   <th style={thStyle}>Actions</th>
                 </tr>
               </thead>
