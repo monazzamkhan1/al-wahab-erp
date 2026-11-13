@@ -30,7 +30,27 @@ export default function SalesInvoicesPage() {
     const { rows: reconciled } = reconcileInvoices((saleResult.data || []).map((row) => ({ ...row, adjustment: returnsBySale[row.id] || 0 })), { partyKey: "customer_id", initialKey: "received_amount", directCredits: (paymentResult.data || []).map((row) => ({ partyId: row.customer_id, invoiceId: row.sale_id, amount: row.amount })) });
     const rows = reconciled.reverse(); setInvoices(rows);
     const invoiceIds = rows.map((row) => row.id); const customerIds = [...new Set(rows.map((row) => row.customer_id).filter(Boolean))];
-    const [itemResult, customerResult, legacyResult] = await Promise.all([invoiceIds.length ? supabase.from("sale_items").select("id,sale_id,product_id,batch_id,quantity,bonus_quantity,amount,product_name_snapshot").in("sale_id", invoiceIds) : Promise.resolve({ data: [] }), customerIds.length ? supabase.from("customers").select("id,name").in("id", customerIds) : Promise.resolve({ data: [] }), supabase.from("legacy_sale_lines").select("invoice_no,invoice_date,product_name,generic_name,unit,sale_rate,line_amount").order("id", { ascending: true })]);
+    // PostgREST applies a default 1,000-row limit.  A single page silently
+    // dropped the remaining sale lines, so many invoices appeared without
+    // products even though their rows existed in the database.  Read these
+    // two detail tables in pages until the final short page.
+    async function fetchAll(buildQuery) {
+      const all = [];
+      const pageSize = 1000;
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await buildQuery().range(from, from + pageSize - 1);
+        if (error) return { data: all, error };
+        const page = data || [];
+        all.push(...page);
+        if (page.length < pageSize) break;
+      }
+      return { data: all, error: null };
+    }
+    const [itemResult, customerResult, legacyResult] = await Promise.all([
+      invoiceIds.length ? fetchAll(() => supabase.from("sale_items").select("id,sale_id,product_id,batch_id,quantity,bonus_quantity,amount,product_name_snapshot").in("sale_id", invoiceIds)) : Promise.resolve({ data: [] }),
+      customerIds.length ? supabase.from("customers").select("id,name").in("id", customerIds) : Promise.resolve({ data: [] }),
+      fetchAll(() => supabase.from("legacy_sale_lines").select("invoice_no,invoice_date,product_name,generic_name,unit,sale_rate,line_amount").order("id", { ascending: true })),
+    ]);
     if (itemResult.error) { setError(itemResult.error.message); setLoading(false); return; }
     const lineItems = itemResult.data || [];
     const salesByInvoice = Object.fromEntries(rows.map((row) => [String(row.invoice_no || "").toLowerCase(), row]));
