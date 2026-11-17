@@ -17,8 +17,8 @@ export default function PartyLedger({ kind }) {
   const [partySummaries, setPartySummaries] = useState([]);
   const [partyId, setPartyId] = useState("");
   const [partySearch, setPartySearch] = useState("");
-  const [fromDate, setFromDate] = useState(yearStart);
-  const [toDate, setToDate] = useState(today);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [invoices, setInvoices] = useState([]);
   const [payments, setPayments] = useState([]);
   const [returns, setReturns] = useState([]);
@@ -91,7 +91,7 @@ export default function PartyLedger({ kind }) {
 
   async function loadLedger() {
     if (!partyId) return;
-    if (!fromDate || !toDate || fromDate > toDate) { setError("Valid starting aur ending date select karein."); return; }
+    if (fromDate && toDate && fromDate > toDate) { setError("Starting date ending date se pehle honi chahiye."); return; }
     setLoading(true); setError(""); setMessage("");
     const invoiceTable = supplier ? "purchases" : "sales";
     const invoiceDate = "invoice_date";
@@ -100,11 +100,12 @@ export default function PartyLedger({ kind }) {
     const paymentPartyKey = supplier ? "supplier_id" : "customer_id";
     const itemTable = supplier ? "purchase_items" : "sale_items";
     const itemLink = supplier ? "purchase_id" : "sale_id";
-    const [invoiceResult, paymentResult, returnResult] = await Promise.all([
-      supabase.from(invoiceTable).select(`id,invoice_no,${invoiceDate},total_amount,${supplier ? "paid_amount" : "received_amount"},notes,created_at`).eq(invoicePartyKey, partyId).gte(invoiceDate, fromDate).lte(invoiceDate, toDate).order(invoiceDate),
-      supabase.from(paymentTable).select(`id,${supplier ? "purchase_id" : "sale_id"},payment_date,amount,payment_method,reference_no,notes,created_at`).eq(paymentPartyKey, partyId).gte("payment_date", fromDate).lte("payment_date", toDate).order("payment_date"),
-      supplier ? supabase.from("supplier_stock_returns").select("id,purchase_id,product_id,batch_id,quantity,return_date,reference_no,notes,return_amount,unit_rate").eq("supplier_id", partyId).gte("return_date", fromDate).lte("return_date", toDate).order("return_date") : supabase.from("stock_returns").select("id,sale_id,sale_item_id,product_id,batch_id,quantity,return_date,reference_no,notes,return_amount,unit_rate").eq("customer_id", partyId).gte("return_date", fromDate).lte("return_date", toDate).order("return_date"),
-    ]);
+    const invoiceQuery = supabase.from(invoiceTable).select(`id,invoice_no,${invoiceDate},total_amount,${supplier ? "paid_amount" : "received_amount"},notes,created_at`).eq(invoicePartyKey, partyId).order(invoiceDate);
+    const paymentQuery = supabase.from(paymentTable).select(`id,${supplier ? "purchase_id" : "sale_id"},payment_date,amount,payment_method,reference_no,notes,created_at`).eq(paymentPartyKey, partyId).order("payment_date");
+    const returnQuery = supplier ? supabase.from("supplier_stock_returns").select("id,purchase_id,product_id,batch_id,quantity,return_date,reference_no,notes,return_amount,unit_rate").eq("supplier_id", partyId).order("return_date") : supabase.from("stock_returns").select("id,sale_id,sale_item_id,product_id,batch_id,quantity,return_date,reference_no,notes,return_amount,unit_rate").eq("customer_id", partyId).order("return_date");
+    if (fromDate) { invoiceQuery.gte(invoiceDate, fromDate); paymentQuery.gte("payment_date", fromDate); returnQuery.gte("return_date", fromDate); }
+    if (toDate) { invoiceQuery.lte(invoiceDate, toDate); paymentQuery.lte("payment_date", toDate); returnQuery.lte("return_date", toDate); }
+    const [invoiceResult, paymentResult, returnResult] = await Promise.all([invoiceQuery, paymentQuery, returnQuery]);
     if (invoiceResult.error || paymentResult.error || returnResult.error) { setError("Ledger load nahi ho saka: " + (invoiceResult.error || paymentResult.error || returnResult.error).message); setLoading(false); return; }
     const loadedInvoices = invoiceResult.data || [];
     setInvoices(loadedInvoices); setPayments(paymentResult.data || []); setReturns(returnResult.data || []);
@@ -139,6 +140,31 @@ export default function PartyLedger({ kind }) {
   const totalBalance = entries.length ? entries[entries.length - 1].balance : 0;
   const itemByInvoice = useMemo(() => items.reduce((map, item) => { const key = item[supplier ? "purchase_id" : "sale_id"]; (map[key] ||= []).push(item); return map; }, {}), [items, supplier]);
   const visiblePartySummaries = partySummaries.filter((summary) => summary.party.name.toLowerCase().includes(partySearch.toLowerCase()));
+
+  useEffect(() => {
+    if (partyId) return undefined;
+    const rows = Array.from(document.querySelectorAll(".partyDirectoryTable tbody tr"));
+    const cleanup = [];
+    rows.forEach((row, index) => {
+      const summary = visiblePartySummaries[index];
+      if (!summary) return;
+      row.tabIndex = 0;
+      row.style.cursor = "pointer";
+      row.setAttribute("aria-label", `Open ${summary.party.name} ledger`);
+      const open = () => openParty(summary.party);
+      const onKeyDown = (event) => {
+        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); return; }
+        if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+        event.preventDefault();
+        const nextIndex = Math.max(0, Math.min(rows.length - 1, index + (event.key === "ArrowDown" ? 1 : -1)));
+        rows[nextIndex]?.focus();
+      };
+      row.addEventListener("click", open);
+      row.addEventListener("keydown", onKeyDown);
+      cleanup.push(() => { row.removeEventListener("click", open); row.removeEventListener("keydown", onKeyDown); });
+    });
+    return () => cleanup.forEach((remove) => remove());
+  }, [partyId, visiblePartySummaries]);
 
   async function addPayment(event) {
     event.preventDefault(); setMessage(""); setError("");
@@ -192,6 +218,7 @@ export default function PartyLedger({ kind }) {
     <section style={s.card} className="noPrint"><div style={s.filterGrid}><label style={s.label}>Select {labels.singular}<input list="party-search" value={partySearch} onChange={(event) => chooseParty(event.target.value)} style={s.input} placeholder={`Type ${labels.singular} name, then select from list...`} disabled={loading}/><datalist id="party-search">{parties.map((party) => <option key={party.id} value={party.name} />)}</datalist></label><label style={s.label}>Starting Date<input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} style={s.input}/></label><label style={s.label}>Ending Date<input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} style={s.input}/></label><button type="button" onClick={loadLedger} style={s.load}>Load Ledger</button></div></section>
     {!partyId && <section style={s.card} className="noPrint"><div style={s.partyListHead}><div><p style={s.sectionTag}>PARTY DIRECTORY</p><h2 style={s.h2}>{labels.plural} Overview</h2><p style={s.printSub}>Kisi bhi {labels.singular.toLowerCase()} ko select karke us ka complete detailed ledger kholain.</p></div><strong style={s.partyCount}>{visiblePartySummaries.length} {labels.plural}</strong></div>{loading ? <p>Loading {labels.plural.toLowerCase()}...</p> : !visiblePartySummaries.length ? <p style={s.muted}>Koi {labels.singular.toLowerCase()} nahi mila.</p> : <div style={s.directoryScroll}><table className="partyDirectoryTable" style={s.directoryTable}><thead><tr><th>{labels.singular}</th><th>{labels.invoice}s</th><th>Invoice Total</th><th>Paid / Received</th><th>Net Position</th><th></th></tr></thead><tbody>{visiblePartySummaries.map((summary) => <tr key={summary.party.id}><td><strong>{summary.party.name}</strong><small>{supplier ? "Purchase source" : "Customer account"}</small></td><td>{summary.invoices}</td><td>{money(summary.debit)}</td><td>{money(summary.credit)}</td><td><span style={{...s.statusPill,color:summary.balance > 0 ? "#b54708" : "#067647",background:summary.balance > 0 ? "#fff7ed" : "#ecfdf3"}}>{summary.balance > 0 ? "Outstanding" : "Advance / Settled"}<b>{money(Math.abs(summary.balance))}</b></span></td><td><button type="button" onClick={() => openParty(summary.party)} style={s.openButton}>Open Ledger →</button></td></tr>)}</tbody></table></div>}</section>}
     {partyId && <>
+      <div className="noPrint" style={{ marginBottom: 12 }}><button type="button" onClick={() => { setPartyId(""); setPartySearch(""); }} style={s.back}>← Customer List</button></div>
       <section style={s.ledgerHeader}><div style={s.brand}><img src="/images/al-wahab-logo-transparent.png" alt="Al Wahab Enterprises" style={s.logo}/><div><h2 style={s.partyName}>{partyName}</h2><strong>{labels.title}</strong><p style={s.printSub}>Starting Date: {fromDate} &nbsp; | &nbsp; Ending Date: {toDate}</p></div></div><div style={s.balanceBox}><span>Outstanding Balance</span><strong>{money(totalBalance)}</strong><small>{supplier ? "Payable to supplier" : "Receivable from customer"}</small></div></section>
       <section style={s.card} className="noPrint"><h2 style={s.h2}>Record Payment</h2><p style={s.direction}><b>{labels.direction}</b> - is entry se ledger mein credit aur balance kam hoga.</p><form onSubmit={addPayment} style={s.filterGrid}><label style={s.label}>Amount *<input required min="0.01" step="0.01" type="number" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} style={s.input}/></label><label style={s.label}>Date *<input required type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} style={s.input}/></label><label style={s.label}>Payment Method<select value={form.method} onChange={(event) => setForm({ ...form, method: event.target.value })} style={s.input}>{["cash", "bank_transfer", "online_transfer", "cheque", "other"].map((method) => <option key={method} value={method}>{niceMethod(method)}</option>)}</select></label><label style={s.label}>Invoice (optional)<select value={form.invoiceId} onChange={(event) => setForm({ ...form, invoiceId: event.target.value })} style={s.input}><option value="">Whole party ledger</option>{invoices.map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.invoice_no} - {money(invoice.total_amount)}</option>)}</select></label><label style={s.label}>Reference / Cheque No.<input value={form.reference} onChange={(event) => setForm({ ...form, reference: event.target.value })} style={s.input}/></label><label style={s.label}>Narration / Notes<input value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} style={s.input}/></label><button disabled={saving} style={s.save}>{saving ? "Saving..." : labels.direction}</button></form></section>
       <section className="ledgerPdfSection" style={s.card}><div className="ledgerReportHeader"><div className="ledgerReportBrand"><img src="/images/al-wahab-logo-transparent.png" alt="" /><div><strong>Al Wahab Enterprises</strong><small>Pharmaceutical Distribution</small></div></div><div className="ledgerReportTitle"><strong>{labels.title.toUpperCase()}</strong><small>{partyName}</small><small>{fromDate} to {toDate}</small></div></div><div style={s.tableHead}><div><h2 style={s.h2}>Detail Ledger</h2><p style={s.printSub}>Debit = invoice amount. Credit = {supplier ? "payment sent to supplier" : "payment received from customer or stock return"}.</p></div><div className="noPrint ledgerPdfControls" style={s.actions}><label style={s.toggle}><input type="checkbox" checked={showProducts} onChange={(event) => setShowProducts(event.target.checked)}/> Product detail</label><button onClick={() => window.print()} style={s.print}>Print</button><button onClick={downloadPdf} disabled={downloading} style={s.pdf}>{downloading ? "Preparing PDF..." : "Download PDF"}</button></div></div>
