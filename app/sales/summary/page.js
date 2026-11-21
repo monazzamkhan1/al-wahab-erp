@@ -74,7 +74,7 @@ export default function SalesSummaryPage() {
         id: item.id, date: sale.invoice_date, invoiceNo: sale.invoice_no || "-",
         customer: customersById[sale.customer_id] || "Customer",
         product: item.product_name_snapshot || product.product_name || "Product",
-        pack: product.pack_size || "", batch: item.batch_no_snapshot || batchesById[item.batch_id] || "-",
+      pack: product.pack_size || "", batch: item.batch_no_snapshot || "-",
         supplier: supplierNames.join(", ") || "-", quantity: Number(item.quantity || 0),
         bonus: Number(item.bonus_quantity || 0), rate: Number(item.sale_rate || 0),
         discount: Number(item.discount || 0), amount: Number(item.amount || 0), returnQuantity: returned.quantity, returnAmount: returned.amount,
